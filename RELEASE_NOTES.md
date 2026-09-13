@@ -1,3 +1,29 @@
+## 🚀 O que há de novo na v0.3.0 / What's New in v0.3.0
+
+### 🇧🇷 Português
+- 📝 **Seleção de Legendas:** Novo seletor de legendas com opções: "Não", "Sim" (legenda embutida no arquivo de vídeo) e "Sim, (Junto e separado em .vtt)" (legenda embutida + arquivo `.vtt` separado na pasta).
+- 💬 **Filtro de Legendas:** Ignora automaticamente transmissões de live chat (`live_chat`) para evitar downloads indesejados de arquivos `.json`.
+- 🔄 **Botão de Atualização com Feedback:** Novo botão na barra superior ao lado de plataformas ("!") com status dinâmico ("Verificando por atualizações...", "Há uma atualização!", "Sem atualizações") e link direto para instalação.
+- 🎵 **Correção no Download de Áudio (Opus/FLAC/WAV):** Corrigido o erro onde downloads de áudio geravam arquivos `.webp` e `.png` órfãos e mostravam notificação de falha devido à ausência do módulo Python `mutagen`. Agora o applet detecta compatibilidade de capas com `ffmpeg` e limpa quaisquer resíduos temporários.
+
+---
+
+### 🇺🇸 English
+- 📝 **Subtitle Mode Selector:** New subtitle option with "No", "Yes" (embedded in video), and "Yes (embedded + .vtt)" (embeds subtitle + keeps separate `.vtt` file in folder).
+- 💬 **Subtitle Filter:** Automatically excludes `live_chat` transcripts to avoid cluttering folders with raw `.json` chat replays.
+- 🔄 **Update Check Button with Visual Feedback:** Dedicated refresh button next to platforms ("!") with live status ("Checking for updates…", "Update available!", "No updates") and direct install support.
+- 🎵 **Audio Download Bug Fix (Opus/FLAC/WAV):** Fixed an issue where audio downloads left behind orphaned `.webp`/`.png` thumbnail files and reported a false error notification when python `mutagen` was missing. Cover art embedding now checks ffmpeg compatibility and cleans up temporary files safely.
+
+---
+
+### 🇪🇸 Español
+- 📝 **Selector de Subtítulos:** Nueva opción con "No", "Sí" (incrustado en el video) y "Sí (incrustado + .vtt)" (incrustado + archivo `.vtt` independiente).
+- 💬 **Filtro de Subtítulos:** Excluye automáticamente `live_chat` para evitar descargas de archivos `.json` de chats en vivo.
+- 🔄 **Botón de Actualización con Estados:** Botón al lado de plataformas ("!") con retroalimentación en tiempo real.
+- 🎵 **Corrección en Descarga de Audio:** Se corrigió el error donde las descargas de audio dejaban archivos `.webp`/`.png` huérfanos y mostraban un aviso falso de error.
+
+---
+
 ## 🚀 O que há de novo na v0.2.9 / What's New in v0.2.9
 
 ### 🇧🇷 Português

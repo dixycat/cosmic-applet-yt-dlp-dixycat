@@ -133,6 +133,16 @@ async fn cleanup_zero_and_temp_files(dir: &std::path::Path) {
     }
 }
 
+/// Checks if python's `mutagen` package is available for embedding album cover art into Opus/FLAC.
+async fn has_python_mutagen() -> bool {
+    tokio::process::Command::new("python3")
+        .args(["-c", "import mutagen"])
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Runs a download through the unified yt-dlp native binary engine with live progress streaming.
 #[allow(clippy::too_many_arguments)]
 async fn run_download_job(
@@ -147,6 +157,7 @@ async fn run_download_job(
     video_quality: VideoQuality,
     audio_quality: AudioQuality,
     economy_mode: bool,
+    subtitle_mode: SubtitleMode,
     output: &mut cosmic::iced::futures::channel::mpsc::Sender<cosmic::Action<Message>>,
     mut notify: notify_rust::Notification,
 ) {
@@ -246,17 +257,22 @@ async fn run_download_job(
         cmd.arg("--embed-metadata");
         if has_ffprobe && !economy_mode {
             cmd.arg("--embed-thumbnail");
-            // Auto-embed subtitles if available (prefer VTT for MP4/WebM, ASS/SSA for MKV)
-            if video_container_ext == "mkv" {
-                cmd.arg("--write-sub");
-                cmd.arg("--write-auto-sub");
-                cmd.arg("--embed-subs");
-                cmd.arg("--sub-format").arg("ass/srt/best");
+        }
+        // Subtitle flags based on user selection (only for video)
+        if subtitle_mode != SubtitleMode::Off {
+            let sub_fmt = if video_container_ext == "mkv" {
+                "ass/srt/best"
             } else {
-                cmd.arg("--write-sub");
-                cmd.arg("--write-auto-sub");
-                cmd.arg("--embed-subs");
-                cmd.arg("--sub-format").arg("vtt/best");
+                "vtt/best"
+            };
+            cmd.arg("--write-sub");
+            cmd.arg("--write-auto-sub");
+            cmd.arg("--sub-langs").arg("all,-live_chat");
+            cmd.arg("--embed-subs");
+            cmd.arg("--sub-format").arg(sub_fmt);
+            if subtitle_mode == SubtitleMode::EmbeddedAndVtt {
+                // Keep the separate .vtt file alongside the video
+                cmd.arg("--keep-subs");
             }
         }
         cmd.arg("--add-metadata");
@@ -284,7 +300,16 @@ async fn run_download_job(
         cmd.arg("--audio-quality").arg(audio_q);
         // Embed title, artist, album art (thumbnail) into audio file
         cmd.arg("--embed-metadata");
-        if has_ffprobe && !economy_mode {
+        // For audio, ffmpeg natively embeds thumbnails into MP3 and M4A/AAC without extra dependencies.
+        // Formats like Opus and FLAC require python's 'mutagen' module. Without mutagen, yt-dlp fails
+        // with exit code 1 and leaves orphaned .webp/.png thumbnails behind.
+        // WAV does not support embedded thumbnails in yt-dlp.
+        let can_embed_audio_thumb = has_ffprobe && !economy_mode && match audio_ext {
+            "mp3" | "m4a" | "aac" => true,
+            "opus" | "flac" => has_python_mutagen().await,
+            _ => false,
+        };
+        if can_embed_audio_thumb {
             cmd.arg("--embed-thumbnail");
         }
         cmd.arg("--add-metadata");
@@ -358,6 +383,34 @@ async fn run_download_job(
 
     let status = child.wait().await;
     cleanup_zero_and_temp_files(output_dir_ref).await;
+
+    // Safety cleanup: If an audio download occurred and orphaned thumbnail files (.webp / .png)
+    // were left behind, remove them to keep the user's music folder clean.
+    if !video_selected {
+        if let Ok(mut entries) = tokio::fs::read_dir(output_dir_ref).await {
+            let mut audio_stems = std::collections::HashSet::new();
+            let mut img_candidates = Vec::new();
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let p = entry.path();
+                if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                    if ext == audio_ext {
+                        if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                            audio_stems.insert(stem.to_string());
+                        }
+                    } else if ext == "webp" || ext == "png" {
+                        img_candidates.push(p);
+                    }
+                }
+            }
+            for img_path in img_candidates {
+                if let Some(stem) = img_path.file_stem().and_then(|s| s.to_str()) {
+                    if audio_stems.contains(stem) {
+                        let _ = tokio::fs::remove_file(img_path).await;
+                    }
+                }
+            }
+        }
+    }
 
     // Check if download failed and attempt auto-update of yt-dlp
     if !status.as_ref().map_or(false, |s| s.success()) {
@@ -446,6 +499,25 @@ const AUDIO_CODECS: &[AudioCodec] = &[
 const AUDIO_CODEC_LABELS: &[&str] = &["MP3", "AAC (M4A)", "Opus", "FLAC", "WAV", "Any"];
 
 // ---------------------------------------------------------------------------
+// Subtitle mode
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
+pub enum SubtitleMode {
+    #[default]
+    Off,
+    Embedded,
+    EmbeddedAndVtt,
+}
+
+const SUBTITLE_MODES: &[SubtitleMode] = &[
+    SubtitleMode::Off,
+    SubtitleMode::Embedded,
+    SubtitleMode::EmbeddedAndVtt,
+];
+const SUBTITLE_MODE_LABELS: &[&str] = &["No", "Yes (embedded)", "Yes (embedded + .vtt)"];
+
+// ---------------------------------------------------------------------------
 // Per-download progress state
 // ---------------------------------------------------------------------------
 
@@ -497,11 +569,16 @@ pub struct Ytdlp {
     
     // Economy mode for data saving
     economy_mode: bool,
-    
+
+    // Subtitle mode
+    subtitle_mode: SubtitleMode,
+
     // Update checking state
     update_available: Option<ReleaseInfo>,
     is_checking_updates: bool,
     is_installing_update: bool,
+    // Last check result message shown in tooltip
+    update_last_msg: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -541,7 +618,10 @@ pub enum Message {
     /// Surface action forwarded from popup_dropdown
     SurfaceAction(cosmic::surface::Action),
     /// Toggle economy mode for data saving
+    #[allow(dead_code)]
     ToggleEconomyMode,
+    /// Subtitle mode dropdown selection
+    SubtitleModeSelected(usize),
     /// Check for updates from GitHub releases
     CheckForUpdates,
     /// Update check result
@@ -555,9 +635,11 @@ pub enum Message {
 /// Release information from GitHub API
 #[derive(Debug, Clone)]
 pub struct ReleaseInfo {
+    #[allow(dead_code)]
     pub version: String,
     pub tag_name: String,
     pub download_url: String,
+    #[allow(dead_code)]
     pub release_notes: String,
 }
 
@@ -627,8 +709,42 @@ impl Application for Ytdlp {
             space_xxs, space_s, ..
         } = cosmic::theme::active().cosmic().spacing;
 
+        // Determine update button icon and tooltip based on current state
+        let update_icon_name = if self.update_available.is_some() {
+            "software-update-available-symbolic"
+        } else if self.is_checking_updates {
+            "emblem-synchronizing-symbolic"
+        } else {
+            "view-refresh-symbolic"
+        };
+        let update_tooltip_text = if self.is_checking_updates {
+            fl!("checking-updates")
+        } else {
+            self.update_last_msg
+                .clone()
+                .unwrap_or_else(|| fl!("check-updates"))
+        };
+        let update_btn: Element<'_, Message> = if self.update_available.is_some() {
+            cosmic::widget::button::icon(
+                cosmic::widget::icon::from_name(update_icon_name)
+            )
+            .on_press(Message::InstallUpdate)
+            .into()
+        } else if self.is_checking_updates {
+            cosmic::widget::button::icon(
+                cosmic::widget::icon::from_name(update_icon_name)
+            )
+            .into()
+        } else {
+            cosmic::widget::button::icon(
+                cosmic::widget::icon::from_name(update_icon_name)
+            )
+            .on_press(Message::CheckForUpdates)
+            .into()
+        };
+
         let mut content = column![
-            // URL input row + platforms toggle button
+            // URL input row + platforms toggle button + update check button
             row![
                 text_input(fl!("url"), &self.url)
                     .on_input(Message::EnterURL)
@@ -640,7 +756,12 @@ impl Application for Ytdlp {
                     .on_press(Message::TogglePlatforms),
                     cosmic::widget::text::body(fl!("platforms-tooltip")),
                     cosmic::widget::tooltip::Position::Bottom,
-                )
+                ),
+                cosmic::widget::tooltip(
+                    update_btn,
+                    cosmic::widget::text::body(update_tooltip_text),
+                    cosmic::widget::tooltip::Position::Bottom,
+                ),
             ]
             .align_y(Alignment::Center)
             .spacing(space_xxs)
@@ -863,6 +984,7 @@ impl Application for Ytdlp {
                 let video_quality = self.video_quality;
                 let audio_quality = self.audio_quality;
                 let economy_mode = self.economy_mode;
+                let subtitle_mode = self.subtitle_mode;
 
                 return Task::stream(cosmic::iced::stream::channel(
                     64,
@@ -893,6 +1015,7 @@ impl Application for Ytdlp {
                                     video_quality,
                                     audio_quality,
                                     economy_mode,
+                                    subtitle_mode,
                                     &mut output,
                                     notify,
                                 ).await;
@@ -946,6 +1069,11 @@ impl Application for Ytdlp {
             Message::ToggleEconomyMode => {
                 self.economy_mode = !self.economy_mode;
             }
+            Message::SubtitleModeSelected(idx) => {
+                if let Some(&mode) = SUBTITLE_MODES.get(idx) {
+                    self.subtitle_mode = mode;
+                }
+            }
             Message::CheckForUpdates => {
                 self.is_checking_updates = true;
                 return Task::perform(check_for_updates(), |result| {
@@ -954,30 +1082,25 @@ impl Application for Ytdlp {
             }
             Message::UpdateCheckResult(result) => {
                 self.is_checking_updates = false;
+                let current_version = format!("v{}", env!("CARGO_PKG_VERSION"));
                 match result {
                     Ok(Some(release)) => {
+                        self.update_last_msg = Some(format!(
+                            "{} {} → {}",
+                            fl!("update-available"),
+                            current_version,
+                            release.tag_name
+                        ));
                         self.update_available = Some(release);
                     }
                     Ok(None) => {
-                        // No update available, show notification
-                        tokio::spawn(async move {
-                            let mut binding = Notification::new();
-                            let notify = binding
-                                .appname("yt-dlp applet")
-                                .summary("Atualização")
-                                .body("Você já está usando a versão mais recente.");
-                            let _ = notify.show_async().await;
-                        });
+                        self.update_last_msg = Some(fl_str!(
+                            "no-updates",
+                            version = current_version
+                        ).to_string());
                     }
                     Err(e) => {
-                        tokio::spawn(async move {
-                            let mut binding = Notification::new();
-                            let notify = binding
-                                .appname("yt-dlp applet")
-                                .summary("Erro ao verificar atualizações")
-                                .body(&e);
-                            let _ = notify.show_async().await;
-                        });
+                        self.update_last_msg = Some(format!("Erro: {e}"));
                     }
                 }
             }
@@ -1145,6 +1268,33 @@ impl Ytdlp {
             )
         };
 
+        let subtitle_idx = SUBTITLE_MODES
+            .iter()
+            .position(|&m| m == self.subtitle_mode);
+
+        let subtitle_dropdown: Element<'_, Message> = if let Some(pid) = popup_id {
+            Element::from(
+                cosmic::widget::dropdown::popup_dropdown(
+                    SUBTITLE_MODE_LABELS,
+                    subtitle_idx,
+                    Message::SubtitleModeSelected,
+                    pid,
+                    Message::SurfaceAction,
+                    |m| m,
+                )
+                .width(Length::FillPortion(1)),
+            )
+        } else {
+            Element::from(
+                cosmic::widget::dropdown(
+                    SUBTITLE_MODE_LABELS,
+                    subtitle_idx,
+                    Message::SubtitleModeSelected,
+                )
+                .width(Length::FillPortion(1)),
+            )
+        };
+
         column![
             row![
                 body(fl!("video-format")).width(Length::FillPortion(1)),
@@ -1167,9 +1317,17 @@ impl Ytdlp {
             .align_y(Alignment::Center)
             .spacing(space_xxs)
             .apply(padded_control),
+            row![
+                body(fl!("subtitle")).width(Length::FillPortion(1)),
+                subtitle_dropdown,
+            ]
+            .align_y(Alignment::Center)
+            .spacing(space_xxs)
+            .apply(padded_control),
         ]
         .into()
     }
+
 
     fn view_audio(&self, popup_id: Option<window::Id>) -> Element<'_, Message> {
         let audio_quality_idx = AUDIO_QUALITIES
@@ -1347,15 +1505,13 @@ impl Ytdlp {
 
 /// Checks GitHub releases for updates
 async fn check_for_updates() -> Result<Option<ReleaseInfo>, String> {
-    use tokio::io::AsyncReadExt;
-    
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     
     let response = client
-        .get("https://api.github.com/repos/dixycat/cosmic-applet-yt-dlp-dixycat/releases/latest")
+        .get("https://api.github.com/repos/felix-the-cat177/cosmic-applet-yt-dlp-dixycat/releases/latest")
         .header("User-Agent", "cosmic-applet-yt-dlp")
         .send()
         .await
