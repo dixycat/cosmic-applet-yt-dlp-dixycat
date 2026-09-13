@@ -1,3 +1,41 @@
+## 🚀 O que há de novo na v0.2.9 / What's New in v0.2.9
+
+### 🇧🇷 Português
+- 🌿 **Modo Econômico:** Novo toggle para economizar dados — baixa em resolução/bitrate menor para economizar banda e armazenamento.
+- 🔄 **Verificação e Instalação Automática de Atualizações:** Botão "Verificar Atualizações" que consulta a API do GitHub Releases e instala automaticamente usando polkit (sem necessidade de terminal).
+- 🔗 **Validação de URL:** O applet agora valida a URL antes de iniciar o download, evitando erros silenciosos com links inválidos.
+- 🚦 **Limite de Banda:** Nova opção nas configurações para limitar a velocidade de download.
+- ⚡ **Spinner durante extração de metadados:** Feedback visual enquanto o yt-dlp calcula duração/metadados (especialmente útil para Shorts).
+- 🐛 **Correção da barra de progresso para YouTube Shorts:** Regressão corrigida — a barra agora avança corretamente em Shorts.
+- ⚠️ **Erros de legenda não fatais:** Falhas ao baixar legendas não interrompem mais o download principal.
+- ⏱️ **Timeouts de rede:** Adicionados timeouts para evitar travamentos em conexões lentas ou instáveis.
+
+---
+
+### 🇺🇸 English
+- 🌿 **Economy Mode:** New toggle to save data — downloads at lower resolution/bitrate to reduce bandwidth and storage usage.
+- 🔄 **Automatic Update Check & Install:** "Check for Updates" button queries GitHub Releases API and auto-installs the new version using polkit (no terminal needed).
+- 🔗 **URL Validation:** The applet now validates the URL before starting a download, preventing silent failures with invalid links.
+- 🚦 **Bandwidth Limit:** New settings option to cap download speed.
+- ⚡ **Spinner during metadata extraction:** Visual feedback while yt-dlp calculates duration/metadata (especially helpful for Shorts).
+- 🐛 **Progress bar fix for YouTube Shorts:** Regression fixed — progress bar now advances correctly on Shorts.
+- ⚠️ **Non-fatal subtitle errors:** Subtitle download failures no longer abort the main download.
+- ⏱️ **Network timeouts:** Added timeouts to prevent hanging on slow or unstable connections.
+
+---
+
+### 🇪🇸 Español
+- 🌿 **Modo Económico:** Toggle para ahorrar datos — descarga en menor resolución/bitrate para reducir uso de banda y almacenamiento.
+- 🔄 **Verificación e Instalación Automática de Actualizaciones:** Botón que consulta la API de GitHub Releases e instala automáticamente usando polkit.
+- 🔗 **Validación de URL:** La aplicación valida la URL antes de iniciar la descarga.
+- 🚦 **Límite de Ancho de Banda:** Nueva opción en configuraciones para limitar la velocidad de descarga.
+- ⚡ **Spinner durante extracción de metadatos:** Retroalimentación visual mientras yt-dlp calcula metadatos.
+- 🐛 **Corrección de barra de progreso en YouTube Shorts:** Regresión corregida.
+- ⚠️ **Errores de subtítulos no fatales:** Los fallos al descargar subtítulos ya no abortan la descarga principal.
+- ⏱️ **Timeouts de red:** Añadidos timeouts para evitar bloqueos en conexiones lentas.
+
+---
+
 ## 🚀 O que há de novo na v0.2.7 / What's New in v0.2.7
 
 ### 🇧🇷 Português
@@ -18,38 +56,3 @@
 - 🔄 **Auto-Actualización Automática de yt-dlp:** La aplicación ahora verifica y descarga automáticamente la última versión de `yt-dlp` en segundo plano al iniciar.
 - ⚠️ **Notificación de Actualización en Caso de Fallo:** Si una descarga falla, la aplicación intenta actualizar `yt-dlp` automáticamente.
 - 🔍 **Detección Proactiva de Versiones:** Verificación de la versión instalada de `yt-dlp`.
-
----
-
-## 🚀 O que há de novo na v0.2.6 / What's New in v0.2.6
-
-### 🇧🇷 Português
-- 🎨 **Ícone no Painel e Dock Corrigido:** Os ícones SVG (normal e simbólico) agora são empacotados corretamente dentro dos pacotes `.deb`, `.rpm` e `.tar.gz`. O ícone agora aparece nas Configurações do COSMIC, na Dock e no Painel superior.
-- 🛡️ **Correção da Falha de Inicialização (`ChecksumMismatch`):** O applet não trava mais com erro de checksum ao tentar baixar o FFmpeg. Agora ele detecta automaticamente o FFmpeg do sistema e trata downloads com tolerância a falhas.
-- 🎬 **Downloads do YouTube (Vídeo e Música) Restaurados:**
-  - Contorno do bloqueio SABR do YouTube com fallback para clientes `default,web_embedded,ios`.
-  - Correção na integração do FFmpeg e suporte a `ffprobe` para incorporação de miniaturas/capa sem travamentos de pós-processamento.
-  - Download e validação automática do binário oficial mais recente do `yt-dlp`.
-- 📦 **Dependência Oficial do FFmpeg no Pacote DEB:** O pacote `.deb` agora declara `ffmpeg` como dependência, instalando-o nativamente pelo gerenciador de pacotes do sistema (`apt`).
-
----
-
-### 🇺🇸 English
-- 🎨 **Panel & Dock Icon Fixed:** SVG icons (standard and symbolic) are now properly bundled inside `.deb`, `.rpm`, and `.tar.gz` packages. The applet icon now displays correctly in COSMIC Settings, Dock, and Panel.
-- 🛡️ **Startup Crash Fixed (`ChecksumMismatch`):** The applet no longer panics during launch when checking FFmpeg. It automatically links to system FFmpeg/FFprobe with fault-tolerant download fallback.
-- 🎬 **YouTube Downloads (Video & Audio) Restored:**
-  - Bypassed YouTube's SABR-only restrictions using `default,web_embedded,ios` clients.
-  - Fixed FFmpeg directory discovery and `ffprobe` detection for embedding thumbnails and album art without postprocessing errors.
-  - Automatic download and integrity validation for the latest official `yt-dlp` binary.
-- 📦 **Native FFmpeg Dependency in DEB:** Added `ffmpeg` to package dependencies for automatic installation via `apt`.
-
----
-
-### 🇪🇸 Español
-- 🎨 **Icono en Panel y Dock Corregido:** Los iconos SVG ahora se empaquetan correctamente en `.deb`, `.rpm` y `.tar.gz`.
-- 🛡️ **Solución al Cierre Inesperado (`ChecksumMismatch`):** Detección automática de FFmpeg del sistema y tolerancia a fallos.
-- 🎬 **Descargas de YouTube (Video y Música) Restauradas:**
-  - Evita el bloqueo SABR de YouTube con clientes `default,web_embedded,ios`.
-  - Detección de `ffprobe` para incrustación de carátulas sin errores de postprocesamiento.
-  - Actualización automática al último motor oficial de `yt-dlp`.
-- 📦 **Dependencia Nativa de FFmpeg:** Añadido `ffmpeg` a las dependencias de instalación en `.deb`.
