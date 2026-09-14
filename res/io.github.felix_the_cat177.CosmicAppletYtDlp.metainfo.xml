@@ -4,34 +4,24 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-only</project_license>
   <project_group>COSMIC</project_group>
-  <developer_name>Dixycat</developer_name>
+  <developer id="io.github.felix_the_cat177">
+    <name>Dixycat</name>
+  </developer>
   <url type="homepage">https://github.com/felix-the-cat177/cosmic-applet-yt-dlp-dixycat</url>
   <url type="bugtracker">https://github.com/felix-the-cat177/cosmic-applet-yt-dlp-dixycat/issues</url>
   <name>COSMIC yt-dlp Applet</name>
   <name xml:lang="pt_BR">Miniaplicativo yt-dlp COSMIC</name>
   <name xml:lang="es">Applet yt-dlp COSMIC</name>
-  <summary>A modern yt-dlp GUI applet for the COSMIC desktop panel</summary>
-  <summary xml:lang="pt_BR">Miniaplicativo de download rápido para o painel COSMIC</summary>
-  <summary xml:lang="es">Miniaplicación de descarga rápida para el panel COSMIC</summary>
+  <summary>Download videos and music from the COSMIC panel</summary>
+  <summary xml:lang="pt_BR">Baixe vídeos e músicas pelo painel COSMIC</summary>
+  <summary xml:lang="es">Descarga videos y música desde el panel COSMIC</summary>
   <description>
-    <p>
-      A native applet for the COSMIC Desktop Environment that allows you to easily
-      download videos and extract audio streams using yt-dlp with real-time progress,
-      quality and codec selection, custom filename renaming, container format choice (MP4, MKV, WebM),
-      cancellation support, scrollable UI, and full playlist handling.
-    </p>
-    <p xml:lang="pt_BR">
-      Um miniaplicativo nativo para o COSMIC Desktop que permite baixar vídeos e extrair
-      áudios com praticidade usando yt-dlp, com progresso em tempo real, seleção de
-      qualidade e codec, renomeação de arquivo, escolha de formato (MP4, MKV, WebM),
-      botão de cancelar, interface rolável e suporte completo a playlists.
-    </p>
-    <p xml:lang="es">
-      Una miniaplicación nativa para COSMIC Desktop que permite descargar videos y extraer
-      audios fácilmente usando yt-dlp, con progreso en tiempo real, selección de calidad y
-      códec, cambio de nombre de archivo, elección de formato (MP4, MKV, WebM), botón de cancelar,
-      interfaz desplazable y soporte completo para listas de reproducción.
-    </p>
+    <p>Dixycat yt-dlp is a small applet for the COSMIC panel. Paste a video or playlist link, choose video or audio, and save it to your computer.</p>
+    <p>You can choose quality and format, see download progress, and cancel a download at any time.</p>
+    <p xml:lang="pt_BR">Dixycat yt-dlp é um miniaplicativo para o painel COSMIC. Cole o link de um vídeo ou playlist, escolha vídeo ou áudio e salve no computador.</p>
+    <p xml:lang="pt_BR">Você pode escolher a qualidade e o formato, acompanhar o progresso e cancelar o download quando quiser.</p>
+    <p xml:lang="es">Dixycat yt-dlp es una pequeña aplicación para el panel COSMIC. Pega el enlace de un vídeo o lista de reproducción, elige vídeo o audio y guárdalo en tu equipo.</p>
+    <p xml:lang="es">Puedes elegir la calidad y el formato, ver el progreso y cancelar la descarga cuando quieras.</p>
   </description>
   <launchable type="desktop-id">io.github.felix_the_cat177.CosmicAppletYtDlp.desktop</launchable>
   <icon type="stock">io.github.felix_the_cat177.CosmicAppletYtDlp</icon>
@@ -49,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.0" date="2026-09-13">
+      <description>
+        <p>Improved download cancellation, YouTube Music support, and optional debug logs.</p>
+        <p xml:lang="pt_BR">Cancelamento de downloads melhorado, suporte ao YouTube Music e logs de depuração opcionais.</p>
+        <p xml:lang="es">Cancelación de descargas mejorada, soporte para YouTube Music y registros de depuración opcionales.</p>
+      </description>
+    </release>
     <release version="0.2.5" date="2026-09-01">
       <description>
         <p>Automatic metadata embedding (title, artist, album art/thumbnail, chapters) for all downloaded audio and video files. Also includes YouTube SABR bypass via android player client and IPv4 forcing, 0KB file fix, cancel button, real-time progress, scrollable UI, and Spanish translation.</p>
@@ -63,9 +60,6 @@
     </release>
   </releases>
   <provides>
-    <id>io.github.felix_the_cat177.CosmicAppletYtDlp</id>
-    <binaries>
-      <binary>cosmic-applet-yt-dlp-dixycat</binary>
-    </binaries>
+    <binary>cosmic-applet-yt-dlp-dixycat</binary>
   </provides>
 </component>

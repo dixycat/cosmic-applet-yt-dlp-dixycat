@@ -29,6 +29,11 @@
   - Tamaño descargado vs tamaño total (`1.2 MB / 3.8 MB`)
 - 📁 **Carpeta de Descarga Personalizada**: Elige carpetas de destino para videos y música con el selector de archivos nativo del sistema.
 - 🔔 **Notificaciones del Sistema**: Alertas en el escritorio al iniciar, finalizar o si ocurre algún error.
+- 🎵 **YouTube Music y Cancelación Confiable**: Usa el cliente dedicado de YouTube Music con alternativas y detiene tanto la consulta del título como las descargas activas al cancelar.
+
+### Diagnóstico
+
+Inicia el applet con `--debug` (o `-d`), o define `COSMIC_YTDLP_DEBUG=1`, para guardar diagnósticos detallados de yt-dlp como `debug.log` en el directorio de caché de la aplicación.
 
 ---
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::collections::HashMap;
-use cosmic::iced::futures::SinkExt;
 use std::path::PathBuf;
 
 use cosmic::app::{Core, Task};
@@ -23,6 +22,45 @@ use crate::{fetcher, fl, fl_str};
 
 use reqwest;
 use serde_json;
+
+// ---------------------------------------------------------------------------
+// Debug logging support
+// ---------------------------------------------------------------------------
+
+static DEBUG_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn enable_debug() {
+    DEBUG_MODE.store(true, std::sync::atomic::Ordering::Relaxed);
+    eprintln!("[DEBUG] Verbose debug logging enabled");
+}
+
+pub fn is_debug() -> bool {
+    DEBUG_MODE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn log_to_file(msg: &str) {
+    if !is_debug() {
+        return;
+    }
+    if let Ok(cache_dir) = xdg::BaseDirectories::with_prefix("cosmic-applet-yt-dlp-dixycat") {
+        if let Ok(path) = cache_dir.place_cache_file("debug.log") {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                let _ = writeln!(f, "{}", msg);
+            }
+        }
+    }
+}
+
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        if $crate::applet::is_debug() {
+            let msg = format!("[DEBUG] {}", format_args!($($arg)*));
+            eprintln!("{}", msg);
+            $crate::applet::log_to_file(&msg);
+        }
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -125,8 +163,17 @@ async fn cleanup_zero_and_temp_files(dir: &std::path::Path) {
             continue;
         };
         if meta.is_file() {
-            // Remove 0KB empty corrupted files or leftover temporary part files
-            if meta.len() == 0 || name.ends_with(".part") || name.ends_with(".ytdl") || name.starts_with("temp_video_") || name.starts_with("temp_audio_") {
+            // Remove 0KB empty corrupted files or leftover temporary part/temp files
+            let is_temp = meta.len() == 0
+                || name.ends_with(".part")
+                || name.ends_with(".ytdl")
+                || name.ends_with(".temp")
+                || name.contains(".part-")
+                || name.contains(".temp.")
+                || name.starts_with("temp_video_")
+                || name.starts_with("temp_audio_");
+            if is_temp {
+                debug_log!("Removing leftover temporary file: {:?}", entry.path());
                 let _ = tokio::fs::remove_file(entry.path()).await;
             }
         }
@@ -158,29 +205,60 @@ async fn run_download_job(
     audio_quality: AudioQuality,
     economy_mode: bool,
     subtitle_mode: SubtitleMode,
+    cancel_rx: &mut tokio::sync::oneshot::Receiver<()>,
     output: &mut cosmic::iced::futures::channel::mpsc::Sender<cosmic::Action<Message>>,
     mut notify: notify_rust::Notification,
 ) {
     use cosmic::iced::futures::SinkExt;
-    use tokio::io::AsyncBufReadExt;
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+
+    debug_log!("Starting download job #{}: url={:?}, video_selected={}, format={}", download_id, url, video_selected, if video_selected { video_container_ext } else { audio_ext });
 
     // Detect if this is a playlist URL
     let is_playlist = url.contains("list=") || url.contains("/playlist");
 
-    // Extract title quickly for display and notifications
-    let title_output = tokio::process::Command::new(&downloader.libraries().youtube)
+    // Extract the title for the notification. This is its own yt-dlp process,
+    // so it must also observe cancellation before the actual download starts.
+    let mut title_cmd = tokio::process::Command::new(&downloader.libraries().youtube);
+    title_cmd
+        .kill_on_drop(true)
         .arg("--force-ipv4")
-        .arg("--extractor-args").arg("youtube:player_client=default,web_embedded,ios")
+        .arg("--extractor-args").arg("youtube:player_client=default,web_music,mweb,ios")
         .arg("--print").arg("%(title)s")
         .arg("--no-warnings")
         .arg("--no-playlist")
         .arg(url)
-        .output()
-        .await;
+        .stdout(std::process::Stdio::piped());
+    let mut title_bytes = Vec::new();
+    let title_output = match title_cmd.spawn() {
+        Ok(mut title_child) => {
+            if let Some(mut title_stdout) = title_child.stdout.take() {
+                tokio::select! {
+                    _ = &mut *cancel_rx => {
+                        debug_log!("Download #{} was cancelled while resolving its title", download_id);
+                        let _ = title_child.start_kill();
+                        let _ = title_child.wait().await;
+                        cleanup_zero_and_temp_files(output_dir_ref).await;
+                        let _ = output.send(cosmic::Action::App(Message::Finished(download_id))).await;
+                        return;
+                    }
+                    result = async {
+                        let _ = title_stdout.read_to_end(&mut title_bytes).await;
+                        title_child.wait().await
+                    } => result.ok(),
+                }
+            } else {
+                None
+            }
+        }
+        Err(error) => {
+            debug_log!("Could not start title lookup for download #{}: {:?}", download_id, error);
+            None
+        }
+    };
 
     let extracted_title = title_output
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|_| String::from_utf8(title_bytes).ok())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
@@ -205,9 +283,15 @@ async fn run_download_job(
         || std::path::Path::new("/usr/bin/ffprobe").exists();
 
     let mut cmd = tokio::process::Command::new(&downloader.libraries().youtube);
+    cmd.kill_on_drop(true);
+    if is_debug() {
+        cmd.arg("--verbose");
+    }
     cmd.arg("--ffmpeg-location").arg(ffmpeg_dir);
     cmd.arg("--force-ipv4");
-    cmd.arg("--extractor-args").arg("youtube:player_client=default,web_embedded,ios");
+    // `web_music` makes Music URLs use their dedicated Innertube client;
+    // the remaining clients provide fallbacks when one is rate-limited.
+    cmd.arg("--extractor-args").arg("youtube:player_client=default,web_music,mweb,ios");
     cmd.arg("--socket-timeout").arg("30");
     cmd.arg("--retries").arg("10");
     cmd.arg("--fragment-retries").arg("10");
@@ -323,9 +407,12 @@ async fn run_download_job(
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
+    debug_log!("Spawning yt-dlp command: {:?}", cmd);
+
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(_) => {
+        Err(e) => {
+            debug_log!("Failed to spawn yt-dlp: {:?}", e);
             tokio::spawn(async move {
                 let _ = notify.summary(&fl_str!("download-failed", title = display_title)).show_async().await;
             });
@@ -334,6 +421,16 @@ async fn run_download_job(
         }
     };
 
+    // Continuously drain stderr to avoid Linux pipe buffer deadlock (64KB)
+    if let Some(stderr) = child.stderr.take() {
+        let mut reader = tokio::io::BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug_log!("[yt-dlp stderr #{}] {}", download_id, line);
+            }
+        });
+    }
+
     if let Some(stdout) = child.stdout.take() {
         let mut reader = tokio::io::BufReader::new(stdout).lines();
         let mut progress_out = output.clone();
@@ -341,6 +438,7 @@ async fn run_download_job(
         tokio::spawn(async move {
             use cosmic::iced::futures::SinkExt as _;
             while let Ok(Some(line)) = reader.next_line().await {
+                debug_log!("[yt-dlp stdout #{}] {}", download_id, line);
                 if line.contains("[Merger]") || line.contains("[ExtractAudio]") || line.contains("[Fixup]") || line.contains("[ffmpeg]") || line.contains("[VideoRemuxer]") {
                     let _ = progress_out.send(cosmic::Action::App(Message::DownloadProgress {
                         id: download_id,
@@ -381,7 +479,18 @@ async fn run_download_job(
         });
     }
 
-    let status = child.wait().await;
+    let status = tokio::select! {
+        _ = &mut *cancel_rx => {
+            debug_log!("Download #{} was cancelled by user. Terminating process...", download_id);
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            cleanup_zero_and_temp_files(output_dir_ref).await;
+            let _ = output.send(cosmic::Action::App(Message::Finished(download_id))).await;
+            return;
+        }
+        res = child.wait() => res,
+    };
+    debug_log!("Download #{} exited with status: {:?}", download_id, status);
     cleanup_zero_and_temp_files(output_dir_ref).await;
 
     // Safety cleanup: If an audio download occurred and orphaned thumbnail files (.webp / .png)
@@ -515,7 +624,6 @@ const SUBTITLE_MODES: &[SubtitleMode] = &[
     SubtitleMode::Embedded,
     SubtitleMode::EmbeddedAndVtt,
 ];
-const SUBTITLE_MODE_LABELS: &[&str] = &["No", "Yes (embedded)", "Yes (embedded + .vtt)"];
 
 // ---------------------------------------------------------------------------
 // Per-download progress state
@@ -570,8 +678,9 @@ pub struct Ytdlp {
     // Economy mode for data saving
     economy_mode: bool,
 
-    // Subtitle mode
+    // Subtitle mode and labels
     subtitle_mode: SubtitleMode,
+    subtitle_labels: [String; 3],
 
     // Update checking state
     update_available: Option<ReleaseInfo>,
@@ -677,6 +786,12 @@ impl Application for Ytdlp {
                 String::from(path.to_string_lossy())
             });
 
+        let subtitle_labels = [
+            fl!("subtitle-no"),
+            fl!("subtitle-yes"),
+            fl!("subtitle-yes-vtt"),
+        ];
+
         let app = Ytdlp {
             core,
             download_type,
@@ -684,6 +799,7 @@ impl Application for Ytdlp {
             video_folder,
             audio_folder,
             lib_dir: flags,
+            subtitle_labels,
             ..Default::default()
         };
 
@@ -997,30 +1113,23 @@ impl Application for Ytdlp {
                         let downloader =
                             fetcher::with_output_dir(&lib_dir, output_dir).await;
 
-                        tokio::select! {
-                            _ = &mut cancel_rx => {
-                                cleanup_zero_and_temp_files(&output_dir_ref).await;
-                                let _ = output.send(Action::App(Message::Finished(download_id))).await;
-                            }
-                            _ = async {
-                                run_download_job(
-                                    download_id,
-                                    video_selected,
-                                    &url,
-                                    custom_name,
-                                    video_container_ext,
-                                    &downloader,
-                                    &output_dir_ref,
-                                    audio_ext,
-                                    video_quality,
-                                    audio_quality,
-                                    economy_mode,
-                                    subtitle_mode,
-                                    &mut output,
-                                    notify,
-                                ).await;
-                            } => {}
-                        }
+                        run_download_job(
+                            download_id,
+                            video_selected,
+                            &url,
+                            custom_name,
+                            video_container_ext,
+                            &downloader,
+                            &output_dir_ref,
+                            audio_ext,
+                            video_quality,
+                            audio_quality,
+                            economy_mode,
+                            subtitle_mode,
+                            &mut cancel_rx,
+                            &mut output,
+                            notify,
+                        ).await;
                     },
                 ));
             }
@@ -1275,7 +1384,7 @@ impl Ytdlp {
         let subtitle_dropdown: Element<'_, Message> = if let Some(pid) = popup_id {
             Element::from(
                 cosmic::widget::dropdown::popup_dropdown(
-                    SUBTITLE_MODE_LABELS,
+                    &self.subtitle_labels,
                     subtitle_idx,
                     Message::SubtitleModeSelected,
                     pid,
@@ -1287,7 +1396,7 @@ impl Ytdlp {
         } else {
             Element::from(
                 cosmic::widget::dropdown(
-                    SUBTITLE_MODE_LABELS,
+                    &self.subtitle_labels,
                     subtitle_idx,
                     Message::SubtitleModeSelected,
                 )

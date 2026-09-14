@@ -1,3 +1,26 @@
+## 🚀 O que há de novo na v0.4.0 / What's New in v0.4.0
+
+### 🇧🇷 Português
+- 🛑 **Cancelamento confiável:** O botão de cancelar agora encerra a busca de título e o download em andamento.
+- 🎵 **YouTube Music:** Melhor compatibilidade com links do YouTube Music.
+- 🐛 **Diagnóstico:** Use `--debug`, `-d` ou `COSMIC_YTDLP_DEBUG=1` para gerar um log detalhado.
+
+---
+
+### 🇺🇸 English
+- 🛑 **Reliable cancellation:** The cancel button now stops both title lookup and the active download.
+- 🎵 **YouTube Music:** Improved compatibility with YouTube Music links.
+- 🐛 **Diagnostics:** Use `--debug`, `-d`, or `COSMIC_YTDLP_DEBUG=1` to create a detailed log.
+
+---
+
+### 🇪🇸 Español
+- 🛑 **Cancelación confiable:** El botón de cancelar ahora detiene la búsqueda del título y la descarga activa.
+- 🎵 **YouTube Music:** Compatibilidad mejorada con enlaces de YouTube Music.
+- 🐛 **Diagnóstico:** Usa `--debug`, `-d` o `COSMIC_YTDLP_DEBUG=1` para crear un registro detallado.
+
+---
+
 ## 🚀 O que há de novo na v0.3.0 / What's New in v0.3.0
 
 ### 🇧🇷 Português

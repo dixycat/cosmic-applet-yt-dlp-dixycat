@@ -33,6 +33,11 @@
   - Downloaded size vs total size (`1.2 MB / 3.8 MB`)
 - 📁 **Custom Download Folder**: Choose default folders for video and audio with a native file picker.
 - 🔔 **System Notifications**: Desktop alerts when downloads finish or if errors occur.
+- 🎵 **YouTube Music and Reliable Cancellation**: Uses the dedicated YouTube Music client with fallbacks, and stops both title lookups and active downloads when cancelled.
+
+### Diagnostics
+
+Start the applet with `--debug` (or `-d`), or set `COSMIC_YTDLP_DEBUG=1`, to write verbose yt-dlp diagnostics to the app cache directory as `debug.log`.
 
 ---
 
