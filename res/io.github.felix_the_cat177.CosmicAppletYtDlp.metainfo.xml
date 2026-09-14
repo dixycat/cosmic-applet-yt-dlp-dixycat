@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.1" date="2026-09-14">
+      <description>
+        <p>More reliable subtitle downloads that do not cancel the video when subtitles fail, plus automatic restart after updating.</p>
+        <p xml:lang="pt_BR">Downloads de legendas mais confiáveis, que não cancelam o vídeo quando uma legenda falha, e reinício automático após atualizar.</p>
+        <p xml:lang="es">Descargas de subtítulos más confiables, que no cancelan el vídeo cuando un subtítulo falla, y reinicio automático después de actualizar.</p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-09-13">
       <description>
         <p>Improved download cancellation, YouTube Music support, and optional debug logs.</p>

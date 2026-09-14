@@ -1,0 +1,14 @@
+PENDENTE
+- Validar o reinício automático após uma atualização da próxima versão publicada.
+- Testar downloads com logs de depuração no TikTok e DeviantArt.
+
+CONCLUÍDO
+- Preparada e publicada a versão v0.4.0 no GitHub.
+- Atualizados os metadados, o nome do desenvolvedor (Dixycat), a descrição simples do applet e as notas de lançamento.
+- Corrigido o cancelamento de downloads e adicionados logs opcionais com `--debug`, `-d` ou `COSMIC_YTDLP_DEBUG=1`.
+- Melhorado o suporte ao YouTube Music.
+- Corrigido o download de legendas: o applet solicita apenas português e inglês, aguarda entre solicitações e não cancela o vídeo caso uma legenda falhe.
+- Declaradas no pacote as dependências de execução para `ffmpeg`, Python, `mutagen`, Node.js e Polkit, para `.deb` e `.rpm`.
+- Corrigido o reinício após atualização: o processo passa a executar a nova versão via `exec`, em vez de apenas fechar e desaparecer do painel.
+- Testados em modo de depuração: YouTube Music, YouTube e Instagram.
+- Corrigida a atualização do pacote .deb; a instalação da v0.4.0 foi confirmada.

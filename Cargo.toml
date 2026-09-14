@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-applet-yt-dlp-dixycat"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 authors = ["Dixycat <felix-the-cat177>"]
 license = "GPL-3.0-only"
@@ -41,7 +41,7 @@ assets = [
     ["res/icons/hicolor/scalable/apps/io.github.felix_the_cat177.CosmicAppletYtDlp.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["res/icons/hicolor/scalable/apps/io.github.felix_the_cat177.CosmicAppletYtDlp-symbolic.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
 ]
-depends = ["libc6", "liblzma5", "libssl3", "libxkbcommon0", "nscd", "ffmpeg"]
+depends = ["libc6", "liblzma5", "libssl3", "libxkbcommon0", "ffmpeg", "nodejs", "python3", "python3-mutagen", "policykit-1"]
 
 [package.metadata.generate-rpm]
 assets = [
@@ -56,6 +56,9 @@ assets = [
 ffmpeg-free = "*"
 glibc = "*"
 libxkbcommon = "*"
-nscd = "*"
+nodejs = "*"
 openssl-libs = "*"
+polkit = "*"
+python3 = "*"
+python3-mutagen = "*"
 xz-libs = "*"

@@ -1,3 +1,26 @@
+## 🚀 O que há de novo na v0.4.1 / What's New in v0.4.1
+
+### 🇧🇷 Português
+- 💬 **Legendas mais confiáveis:** O applet baixa apenas legendas em português e inglês, com intervalo entre solicitações. Uma falha de legenda não cancela mais o vídeo.
+- 📦 **Dependências do pacote:** Os pacotes `.deb` e `.rpm` agora declaram ffmpeg, Python, mutagen, Node.js e Polkit.
+- 🔄 **Reinício após atualização:** O applet executa a nova versão automaticamente depois que a atualização é instalada.
+
+---
+
+### 🇺🇸 English
+- 💬 **More reliable subtitles:** The applet downloads only Portuguese and English subtitles, with a delay between requests. A subtitle failure no longer cancels the video.
+- 📦 **Package dependencies:** `.deb` and `.rpm` packages now declare ffmpeg, Python, mutagen, Node.js, and Polkit.
+- 🔄 **Restart after updating:** The applet automatically runs the new version after an update is installed.
+
+---
+
+### 🇪🇸 Español
+- 💬 **Subtítulos más confiables:** El applet descarga solo subtítulos en portugués e inglés, con una pausa entre solicitudes. Un error de subtítulos ya no cancela el vídeo.
+- 📦 **Dependencias del paquete:** Los paquetes `.deb` y `.rpm` ahora declaran ffmpeg, Python, mutagen, Node.js y Polkit.
+- 🔄 **Reinicio después de actualizar:** El applet ejecuta automáticamente la nueva versión después de instalar una actualización.
+
+---
+
 ## 🚀 O que há de novo na v0.4.0 / What's New in v0.4.0
 
 ### 🇧🇷 Português

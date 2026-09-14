@@ -351,7 +351,14 @@ async fn run_download_job(
             };
             cmd.arg("--write-sub");
             cmd.arg("--write-auto-sub");
-            cmd.arg("--sub-langs").arg("all,-live_chat");
+            // Downloading every automatic language makes hundreds of requests
+            // and can trigger YouTube's rate limit before the video starts.
+            // Prefer Portuguese and English, including regional variants.
+            cmd.arg("--sub-langs").arg("pt-BR,pt,en.*");
+            // A subtitle is optional: do not fail the video when a subtitle
+            // server rate-limits or does not provide the selected language.
+            cmd.arg("--ignore-errors");
+            cmd.arg("--sleep-subtitles").arg("2");
             cmd.arg("--embed-subs");
             cmd.arg("--sub-format").arg(sub_fmt);
             if subtitle_mode == SubtitleMode::EmbeddedAndVtt {
@@ -739,6 +746,8 @@ pub enum Message {
     InstallUpdate,
     /// Installation result
     InstallResult(Result<(), String>),
+    /// The updated binary could not replace the currently running applet.
+    RestartFailed(String),
 }
 
 /// Release information from GitHub API
@@ -1226,16 +1235,8 @@ impl Application for Ytdlp {
                 self.is_installing_update = false;
                 match result {
                     Ok(()) => {
-                        tokio::spawn(async move {
-                            let mut binding = Notification::new();
-                            let notify = binding
-                                .appname("yt-dlp applet")
-                                .summary("Atualização instalada")
-                                .body("O applet será reiniciado automaticamente.");
-                            let _ = notify.show_async().await;
-                            
-                            // Restart the application
-                            std::process::exit(0);
+                        return Task::perform(restart_applet(), |error| {
+                            Action::App(Message::RestartFailed(error))
                         });
                     }
                     Err(e) => {
@@ -1249,6 +1250,17 @@ impl Application for Ytdlp {
                         });
                     }
                 }
+            }
+            Message::RestartFailed(error) => {
+                self.update_last_msg = Some(format!("Atualizado, mas não foi possível reiniciar: {error}"));
+                tokio::spawn(async move {
+                    let mut binding = Notification::new();
+                    let notify = binding
+                        .appname("yt-dlp applet")
+                        .summary("Atualização instalada")
+                        .body("Reabra o applet no painel para usar a nova versão.");
+                    let _ = notify.show_async().await;
+                });
             }
         }
         Task::none()
@@ -1745,4 +1757,40 @@ async fn install_update(download_url: String) -> Result<(), String> {
     let _ = std::fs::remove_file(&deb_path);
     
     Ok(())
+}
+
+/// Replaces this process with the updated executable. `exec` preserves the
+/// process identity used by COSMIC, unlike `exit(0)`, which removes the applet
+/// from the panel without starting it again.
+async fn restart_applet() -> String {
+    let mut binding = Notification::new();
+    let notify = binding
+        .appname("yt-dlp applet")
+        .summary("Atualização instalada")
+        .body("Reiniciando o applet com a nova versão...");
+    let _ = notify.show_async().await;
+
+    // Give the desktop notification a moment to be delivered before replacing
+    // the process. The new executable keeps the original command-line flags.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+
+        let executable = match std::env::current_exe() {
+            Ok(path) => path,
+            Err(error) => return format!("não foi possível localizar o executável: {error}"),
+        };
+        let args: Vec<_> = std::env::args_os().skip(1).collect();
+        debug_log!("Restarting applet with executable {:?}", executable);
+
+        let error = std::process::Command::new(executable).args(args).exec();
+        format!("não foi possível iniciar a nova versão: {error}")
+    }
+
+    #[cfg(not(unix))]
+    {
+        "reinício automático não é suportado neste sistema".to_string()
+    }
 }
