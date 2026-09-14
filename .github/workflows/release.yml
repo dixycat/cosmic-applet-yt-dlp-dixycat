@@ -45,7 +45,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt update
-          sudo apt install -y libxkbcommon-dev
+          sudo apt install -y libxkbcommon-dev unzip
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@v1.12.0
       - name: Install packaging plugins
@@ -54,6 +54,7 @@ jobs:
       - name: Build packages
         id: package
         run: |
+          just prepare-runtime
           just build-release
           just build-deb
           just build-rpm
@@ -63,6 +64,8 @@ jobs:
 
           mkdir -p ./$NAME
           cp ./target/release/$NAME ./res/*.desktop ./res/*.metainfo.xml ./res/install.sh ./$NAME/
+          cp ./res/deno ./$NAME/
+          cp ./res/licenses/DENO-LICENSE ./$NAME/
           cp -r ./res/icons ./$NAME/
           strip -s ./$NAME/$NAME
           tar -czvf $NAME-$ARCH.tar.gz $NAME

@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.2" date="2026-09-14">
+      <description>
+        <p>Packages now include the Deno JavaScript runtime for more reliable YouTube downloads.</p>
+        <p xml:lang="pt_BR">Os pacotes agora incluem o runtime JavaScript Deno para downloads do YouTube mais confiáveis.</p>
+        <p xml:lang="es">Los paquetes ahora incluyen el runtime JavaScript Deno para descargas de YouTube más confiables.</p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-09-14">
       <description>
         <p>More reliable subtitle downloads that do not cancel the video when subtitles fail, plus automatic restart after updating.</p>

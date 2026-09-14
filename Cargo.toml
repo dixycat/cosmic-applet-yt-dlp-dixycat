@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-applet-yt-dlp-dixycat"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 authors = ["Dixycat <felix-the-cat177>"]
 license = "GPL-3.0-only"
@@ -40,8 +40,10 @@ assets = [
     ["res/io.github.felix_the_cat177.CosmicAppletYtDlp.metainfo.xml", "usr/share/metainfo/", "644"],
     ["res/icons/hicolor/scalable/apps/io.github.felix_the_cat177.CosmicAppletYtDlp.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["res/icons/hicolor/scalable/apps/io.github.felix_the_cat177.CosmicAppletYtDlp-symbolic.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["res/deno", "usr/lib/cosmic-applet-yt-dlp-dixycat/deno", "755"],
+    ["res/licenses/DENO-LICENSE", "usr/share/doc/cosmic-applet-yt-dlp-dixycat/DENO-LICENSE", "644"],
 ]
-depends = ["libc6", "liblzma5", "libssl3", "libxkbcommon0", "ffmpeg", "nodejs", "python3", "python3-mutagen", "policykit-1"]
+depends = ["libc6", "liblzma5", "libssl3", "libxkbcommon0", "ffmpeg", "python3", "python3-mutagen", "policykit-1"]
 
 [package.metadata.generate-rpm]
 assets = [
@@ -49,14 +51,15 @@ assets = [
     { source = "LICENSE", dest = "/usr/share/doc/cosmic-applet-yt-dlp-dixycat/LICENSE", doc = true, mode = "644" },
     { source = "res/*.metainfo.xml", dest = "/usr/share/metainfo/", mode = "644" },
     { source = "res/*.desktop", dest = "/usr/share/applications/", mode = "644" },
-    { source = "res/icons/hicolor/scalable/apps/*.svg", dest = "/usr/share/icons/hicolor/scalable/apps/", mode = "644" }
+    { source = "res/icons/hicolor/scalable/apps/*.svg", dest = "/usr/share/icons/hicolor/scalable/apps/", mode = "644" },
+    { source = "res/deno", dest = "/usr/lib/cosmic-applet-yt-dlp-dixycat/deno", mode = "755" },
+    { source = "res/licenses/DENO-LICENSE", dest = "/usr/share/doc/cosmic-applet-yt-dlp-dixycat/DENO-LICENSE", doc = true, mode = "644" }
 ]
 
 [package.metadata.generate-rpm.requires]
 ffmpeg-free = "*"
 glibc = "*"
 libxkbcommon = "*"
-nodejs = "*"
 openssl-libs = "*"
 polkit = "*"
 python3 = "*"

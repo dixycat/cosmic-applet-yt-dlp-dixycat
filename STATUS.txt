@@ -1,5 +1,6 @@
 PENDENTE
 - Validar o reinício automático após uma atualização da próxima versão publicada.
+- Validar o runtime Deno incluído no pacote v0.4.2 com um download do YouTube.
 - Testar downloads com logs de depuração no TikTok e DeviantArt.
 
 CONCLUÍDO
@@ -8,7 +9,8 @@ CONCLUÍDO
 - Corrigido o cancelamento de downloads e adicionados logs opcionais com `--debug`, `-d` ou `COSMIC_YTDLP_DEBUG=1`.
 - Melhorado o suporte ao YouTube Music.
 - Corrigido o download de legendas: o applet solicita apenas português e inglês, aguarda entre solicitações e não cancela o vídeo caso uma legenda falhe.
-- Declaradas no pacote as dependências de execução para `ffmpeg`, Python, `mutagen`, Node.js e Polkit, para `.deb` e `.rpm`.
+- Declaradas no pacote as dependências de execução para `ffmpeg`, Python, `mutagen` e Polkit, para `.deb` e `.rpm`.
+- Incluído o runtime Deno compatível dentro dos pacotes `.deb`, `.rpm` e `.tar.gz`, para o yt-dlp resolver desafios JavaScript do YouTube sem depender do Node.js do sistema.
 - Corrigido o reinício após atualização: o processo passa a executar a nova versão via `exec`, em vez de apenas fechar e desaparecer do painel.
 - Testados em modo de depuração: YouTube Music, YouTube e Instagram.
 - Corrigida a atualização do pacote .deb; a instalação da v0.4.0 foi confirmada.

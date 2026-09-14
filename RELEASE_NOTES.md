@@ -1,3 +1,20 @@
+## 🚀 O que há de novo na v0.4.2 / What's New in v0.4.2
+
+### 🇧🇷 Português
+- ⚙️ **Runtime JavaScript incluído:** Os pacotes agora incluem Deno, usado pelo yt-dlp para lidar melhor com desafios JavaScript do YouTube.
+
+---
+
+### 🇺🇸 English
+- ⚙️ **Bundled JavaScript runtime:** Packages now include Deno, used by yt-dlp to handle YouTube JavaScript challenges more reliably.
+
+---
+
+### 🇪🇸 Español
+- ⚙️ **Runtime JavaScript incluido:** Los paquetes ahora incluyen Deno, utilizado por yt-dlp para gestionar de forma más fiable los desafíos JavaScript de YouTube.
+
+---
+
 ## 🚀 O que há de novo na v0.4.1 / What's New in v0.4.1
 
 ### 🇧🇷 Português

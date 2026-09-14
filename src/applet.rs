@@ -62,6 +62,30 @@ macro_rules! debug_log {
     };
 }
 
+const PACKAGED_DENO_PATH: &str = "/usr/lib/cosmic-applet-yt-dlp-dixycat/deno";
+
+/// Locate the Deno runtime bundled with release packages. A system or
+/// development runtime can be selected explicitly with COSMIC_YTDLP_DENO.
+fn deno_runtime_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("COSMIC_YTDLP_DENO").map(PathBuf::from) {
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    let mut candidates = vec![PathBuf::from(PACKAGED_DENO_PATH)];
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(PathBuf::from(home).join(".local/lib/cosmic-applet-yt-dlp-dixycat/deno"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            candidates.push(parent.join("deno"));
+        }
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("res/deno"));
+    candidates.into_iter().find(|path| path.is_file())
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -227,8 +251,13 @@ async fn run_download_job(
         .arg("--print").arg("%(title)s")
         .arg("--no-warnings")
         .arg("--no-playlist")
-        .arg(url)
         .stdout(std::process::Stdio::piped());
+    if let Some(deno_path) = deno_runtime_path() {
+        title_cmd
+            .arg("--js-runtimes")
+            .arg(format!("deno:{}", deno_path.display()));
+    }
+    title_cmd.arg(url);
     let mut title_bytes = Vec::new();
     let title_output = match title_cmd.spawn() {
         Ok(mut title_child) => {
@@ -289,6 +318,13 @@ async fn run_download_job(
     }
     cmd.arg("--ffmpeg-location").arg(ffmpeg_dir);
     cmd.arg("--force-ipv4");
+    if let Some(deno_path) = deno_runtime_path() {
+        debug_log!("Using bundled Deno runtime: {:?}", deno_path);
+        cmd.arg("--js-runtimes")
+            .arg(format!("deno:{}", deno_path.display()));
+    } else {
+        debug_log!("Bundled Deno runtime was not found");
+    }
     // `web_music` makes Music URLs use their dedicated Innertube client;
     // the remaining clients provide fallbacks when one is rate-limited.
     cmd.arg("--extractor-args").arg("youtube:player_client=default,web_music,mweb,ios");

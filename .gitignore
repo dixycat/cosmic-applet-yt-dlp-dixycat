@@ -25,6 +25,9 @@ target/
 *.swp
 *.swo
 
+# Runtime bundled only while packaging
+res/deno
+
 # Environment
 .env
 .env.local

@@ -26,6 +26,10 @@ icons-sym-src := 'res' / 'icons' / 'hicolor' / 'scalable' / 'apps' / icons-sym
 icons-sym-path := 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / icons-sym
 icons-sym-dst := base-dir / icons-sym-path
 
+deno-src := 'res' / 'deno'
+deno-path := 'lib' / name / 'deno'
+deno-dst := base-dir / deno-path
+
 # Compiles with debug profile
 build-debug *args:
     cargo build {{args}}
@@ -33,14 +37,19 @@ build-debug *args:
 # Compiles with release profile
 build-release *args: (build-debug '--release' args)
 
+# Downloads the pinned Deno runtime bundled with release packages.
+prepare-runtime:
+    sh res/prepare-deno.sh
+
 # Installs files globally
 [no-cd]
-install:
+install: prepare-runtime
     install -Dm0755 {{bin-src}} {{bin-dst}}
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
     install -Dm0644 {{icons-src}} {{icons-dst}}
     install -Dm0644 {{icons-sym-src}} {{icons-sym-dst}}
+    install -Dm0755 {{deno-src}} {{deno-dst}}
 
 
 # Uninstalls globally installed files
@@ -50,16 +59,18 @@ uninstall:
     rm {{metainfo-dst}}
     rm {{icons-dst}}
     rm {{icons-sym-dst}}
+    rm {{deno-dst}}
 
 
 # Installs files locally
 [no-cd]
-install-local:
-    install -Dm0755  ~/.local/bin/{{name}}
-    install -Dm0644  ${XDG_DATA_HOME:-~/.local/share}/{{desktop-path}}
-    install -Dm0644  ${XDG_DATA_HOME:-~/.local/share}/{{metainfo-path}}
-    install -Dm0644  ${XDG_DATA_HOME:-~/.local/share}/{{icons-path}}
-    install -Dm0644  ${XDG_DATA_HOME:-~/.local/share}/{{icons-sym-path}}
+install-local: prepare-runtime
+    install -Dm0755 {{bin-src}} ~/.local/bin/{{name}}
+    install -Dm0644 {{desktop-src}} ${XDG_DATA_HOME:-~/.local/share}/{{desktop-path}}
+    install -Dm0644 {{metainfo-src}} ${XDG_DATA_HOME:-~/.local/share}/{{metainfo-path}}
+    install -Dm0644 {{icons-src}} ${XDG_DATA_HOME:-~/.local/share}/{{icons-path}}
+    install -Dm0644 {{icons-sym-src}} ${XDG_DATA_HOME:-~/.local/share}/{{icons-sym-path}}
+    install -Dm0755 {{deno-src}} ~/.local/lib/{{name}}/deno
 
 # Uninstalls locally installed files
 uninstall-local:
@@ -68,9 +79,10 @@ uninstall-local:
     rm ${XDG_DATA_HOME:-~/.local/share}/{{metainfo-path}}
     rm ${XDG_DATA_HOME:-~/.local/share}/{{icons-path}}
     rm ${XDG_DATA_HOME:-~/.local/share}/{{icons-sym-path}}
+    rm ~/.local/lib/{{name}}/deno
 
 # Compiles and packages deb with release profile
-build-deb:
+build-deb: prepare-runtime
     command -v cargo-deb || cargo install cargo-deb
     cargo deb
 
@@ -80,7 +92,7 @@ install-deb:
 
 # Compiles and packages rpm with release profile
 [no-cd]
-build-rpm: build-release
+build-rpm: prepare-runtime build-release
     command -v cargo-generate-rpm || cargo install cargo-generate-rpm
     strip -s {{bin-src}}
     cargo generate-rpm
