@@ -39,7 +39,7 @@ build-release *args: (build-debug '--release' args)
 
 # Downloads the pinned Deno runtime bundled with release packages.
 prepare-runtime:
-    sh res/prepare-deno.sh
+    bash res/prepare-deno.sh
 
 # Installs files globally
 [no-cd]

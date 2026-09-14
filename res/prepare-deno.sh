@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download the pinned Deno runtime used by yt-dlp's YouTube challenge solver.
-set -euo pipefail
+set -e
 
 deno_version="v2.9.6"
 case "$(uname -m)" in
