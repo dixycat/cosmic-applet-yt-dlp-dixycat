@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="./res/applet-photo2.png" alt="Captura de tela do COSMIC Applet yt-dlp" width="300" />
+  <img src="./res/photo-now.png" alt="Captura de tela do COSMIC Applet yt-dlp" width="300" />
 </p>
 
 ---
