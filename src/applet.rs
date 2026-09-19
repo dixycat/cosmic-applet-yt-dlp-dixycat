@@ -187,15 +187,20 @@ async fn cleanup_zero_and_temp_files(dir: &std::path::Path) {
             continue;
         };
         if meta.is_file() {
-            // Remove 0KB empty corrupted files or leftover temporary part/temp files
-            let is_temp = meta.len() == 0
-                || name.ends_with(".part")
+            // Remove only files that yt-dlp/ffmpeg explicitly use as temporary
+            // artifacts; unrelated empty files in the download directory are safe.
+            let is_temp = name.ends_with(".part")
                 || name.ends_with(".ytdl")
                 || name.ends_with(".temp")
                 || name.contains(".part-")
                 || name.contains(".temp.")
                 || name.starts_with("temp_video_")
-                || name.starts_with("temp_audio_");
+                || name.starts_with("temp_audio_")
+                || (meta.len() == 0
+                    && (name.ends_with(".mp4")
+                        || name.ends_with(".mkv")
+                        || name.ends_with(".webm")
+                        || name.ends_with(".part")));
             if is_temp {
                 debug_log!("Removing leftover temporary file: {:?}", entry.path());
                 let _ = tokio::fs::remove_file(entry.path()).await;
