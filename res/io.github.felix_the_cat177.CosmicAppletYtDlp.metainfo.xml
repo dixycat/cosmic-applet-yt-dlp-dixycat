@@ -9,9 +9,9 @@
   </developer>
   <url type="homepage">https://github.com/felix-the-cat177/cosmic-applet-yt-dlp-dixycat</url>
   <url type="bugtracker">https://github.com/felix-the-cat177/cosmic-applet-yt-dlp-dixycat/issues</url>
-  <name>COSMIC yt-dlp Applet</name>
-  <name xml:lang="pt_BR">Miniaplicativo yt-dlp COSMIC</name>
-  <name xml:lang="es">Applet yt-dlp COSMIC</name>
+  <name>Dixycat-ext-cosmic-yt-dlp</name>
+  <name xml:lang="pt_BR">Dixycat-ext-cosmic-yt-dlp</name>
+  <name xml:lang="es">Dixycat-ext-cosmic-yt-dlp</name>
   <summary>Download videos and music from the COSMIC panel</summary>
   <summary xml:lang="pt_BR">Baixe vídeos e músicas pelo painel COSMIC</summary>
   <summary xml:lang="es">Descarga videos y música desde el panel COSMIC</summary>
