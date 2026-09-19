@@ -12,7 +12,8 @@
 </p>
 
 <p align="center">
-  <img src="./res/applet-photo2.png" alt="COSMIC Applet yt-dlp screenshot" width="380" />
+  <img src=".<img width="362" height="768" alt="image" src="https://github.com/user-attachments/assets/d7ff2fbf-90d4-4841-a76a-0811cd239619" />
+" alt="COSMIC Applet yt-dlp screenshot" width="380" />
 </p>
 
 <p align="center">
