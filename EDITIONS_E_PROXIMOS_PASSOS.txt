@@ -1,0 +1,98 @@
+REGISTRO DE ALTERACOES E PROXIMOS PASSOS
+Projeto: cosmic-applet-yt-dlp-dixycat
+Atualizado em: 2026-09-19
+
+OBJETIVO DESTE ARQUIVO
+Este arquivo resume o que foi alterado durante a correcao dos bugs recentes,
+o que ja foi validado e o que ainda precisa ser conferido. Deve ser atualizado
+quando uma nova alteracao ou teste for concluido.
+
+ALTERACOES FEITAS
+
+1. Atualizacao do yt-dlp
+- A comparacao de versoes deixou de depender de comparacao textual simples.
+- Foi adicionada comparacao numerica por partes da versao.
+- A atualizacao so deve ser indicada quando a versao publicada for realmente
+  mais nova que a versao instalada.
+- Uma versao local mais nova que a release publica nao deve ser rebaixada nem
+  exibida como precisando de atualizacao.
+
+2. Reinicio apos atualizacao
+- O reinicio usa exec para substituir o processo atual pela nova versao.
+- A intencao e manter o applet ligado a mesma instancia do painel COSMIC,
+  evitando abrir uma janela separada ou desaparecer do painel.
+
+3. Legendas
+- As opcoes de legenda foram limitadas ao fluxo em que fazem sentido.
+- Foi removido o argumento --keep-subs, que nao e aceito pela versao do
+  yt-dlp usada pelo pacote.
+- O fluxo de legenda deve diferenciar:
+  a) legenda embutida no arquivo;
+  b) arquivo .vtt separado;
+  c) legenda embutida e .vtt separado.
+- Legendas nao devem quebrar o download principal quando o site nao oferece
+  a faixa solicitada.
+
+4. Sites sem suporte garantido
+- TikTok pode falhar por mudancas no extrator ou por resposta inesperada do
+  site; isso foi reproduzido diretamente com o yt-dlp.
+- Spotify usa protecao DRM e nao deve ser tratado como download de audio comum.
+- Esses dois casos precisam receber uma mensagem clara na interface, mas nao
+  sao corrigidos apenas por uma mudanca local no applet.
+
+5. Tela Sobre e identidade visual
+- Adicionado o mascote PNG Dixycat dentro da secao Sobre.
+- O botao Sobre foi separado do botao clicavel de Plataformas.
+- O nome visual passou a ser Dixycat-ext-cosmic-yt-dlp.
+- O App ID e o executavel tecnico foram mantidos para preservar atualizacoes.
+- O PNG foi incluido no .deb, .rpm, Flatpak e nos alvos install do justfile.
+
+6. Download e legendas
+- Atualizado o libcosmic para o commit 87ab8179.
+- O progresso agora mostra preparacao, download, legendas e pos-processamento.
+- Erros HTTP 429 de legenda sao tratados como falha parcial, sem cancelar o video.
+- A limpeza do modo somente embutido remove apenas os .vtt do titulo atual.
+
+VALIDACOES JA FEITAS
+- cargo test --quiet passou.
+- O pacote .deb foi verificado e contem Dixycat-yt-dlp-icon.png.
+- O log real confirmou download e incorporacao de legendas com status 0.
+- O pacote .deb foi gerado com just build-deb.
+- O pacote foi instalado/reinstalado no sistema.
+- Um download real do YouTube foi confirmado nos logs de depuracao.
+- A falha do TikTok foi reproduzida com o yt-dlp incluido no applet.
+- A limitacao de DRM do Spotify foi reproduzida com o yt-dlp incluido.
+- O repositorio atualmente possui alteracao pendente em src/applet.rs.
+
+AINDA PRECISA SER FEITO
+
+1. Testar no COSMIC em execucao
+- Abrir o applet instalado no painel.
+- Testar legenda embutida + .vtt.
+- Testar somente legenda embutida e confirmar que nao sobra .vtt inesperado.
+- Confirmar que o reinicio apos atualizacao continua no painel, sem uma janela
+  ou instancia separada.
+
+2. Testar a deteccao de atualizacao
+- Comparar uma versao local maior que a release publica.
+- Comparar uma versao local menor que a release publica.
+- Confirmar que a mensagem e o botao aparecem somente no segundo caso.
+
+3. Mensagens da interface
+- Revisar a mensagem mostrada para TikTok quando o extrator falhar.
+- Revisar a mensagem mostrada para Spotify/DRM.
+- Evitar prometer suporte quando a falha depende do site ou do DRM.
+
+4. Empacotamento final
+- Depois dos testes manuais, executar novamente just build-deb.
+- Reinstalar o pacote gerado.
+- Executar cargo test --quiet.
+- Registrar neste arquivo o resultado final e a data.
+
+COMANDO RAPIDO DE VALIDACAO
+cargo test --quiet
+
+ARQUIVOS PRINCIPAIS
+- src/applet.rs: logica do applet, atualizacao, legendas e reinicio.
+- src/fetcher.rs: yt-dlp, ffmpeg, ffprobe e diretorios de dados.
+- STATUS.txt: historico geral do projeto e tarefas anteriores.

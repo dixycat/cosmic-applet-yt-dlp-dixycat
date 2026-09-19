@@ -204,6 +204,50 @@ async fn cleanup_zero_and_temp_files(dir: &std::path::Path) {
     }
 }
 
+async fn cleanup_subtitle_sidecars(dir: &std::path::Path, title: &str) {
+    let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
+        return;
+    };
+    let title = title.trim();
+    if title.is_empty() {
+        return;
+    }
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("vtt") {
+            let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            let belongs_to_download = stem == title
+                || stem
+                    .strip_prefix(title)
+                    .is_some_and(|suffix| suffix.starts_with('.'));
+            if belongs_to_download {
+                debug_log!("Removing embedded-only subtitle sidecar: {:?}", path);
+                let _ = tokio::fs::remove_file(path).await;
+            }
+        }
+    }
+}
+
+async fn subtitle_rate_limit_detected(
+    stderr_log: &std::sync::Arc<tokio::sync::Mutex<Vec<String>>>,
+) -> bool {
+    let lines = stderr_log.lock().await;
+    lines.iter().any(|line| {
+        line.contains("subtitle") && (line.contains("429") || line.contains("Too Many Requests"))
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DownloadStage {
+    #[default]
+    Preparing,
+    Downloading,
+    Subtitles,
+    PostProcessing,
+}
+
 /// Checks if python's `mutagen` package is available for embedding album cover art into Opus/FLAC.
 async fn has_python_mutagen() -> bool {
     tokio::process::Command::new("python3")
@@ -212,6 +256,51 @@ async fn has_python_mutagen() -> bool {
         .await
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+fn is_youtube_url(url: &str) -> bool {
+    let normalized = url.to_ascii_lowercase();
+    normalized.contains("youtube.com")
+        || normalized.contains("youtu.be")
+        || normalized.contains("music.youtube.com")
+}
+
+fn is_tiktok_url(url: &str) -> bool {
+    let normalized = url.to_ascii_lowercase();
+    normalized.contains("tiktok.com")
+}
+
+fn is_spotify_url(url: &str) -> bool {
+    let normalized = url.to_ascii_lowercase();
+    normalized.contains("spotify.com")
+        || normalized.contains("open.spotify.com")
+}
+
+fn unsupported_download_reason(url: &str) -> Option<&'static str> {
+    if is_spotify_url(url) {
+        Some("Spotify usa DRM e não pode ser baixado por este applet.")
+    } else if is_tiktok_url(url) {
+        Some("TikTok pode falhar por limitação do extractor do yt-dlp. Tente outro link ou atualize o yt-dlp.")
+    } else {
+        None
+    }
+}
+
+fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
+    let trimmed = version.trim().trim_start_matches('v');
+    let core = trimmed.split('-').next().unwrap_or(trimmed);
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse::<u64>().ok()?;
+    let minor = parts.next().unwrap_or("0").parse::<u64>().ok()?;
+    let patch = parts.next().unwrap_or("0").parse::<u64>().ok()?;
+    Some((major, minor, patch))
+}
+
+fn is_version_newer(candidate: &str, current: &str) -> bool {
+    match (parse_version(candidate), parse_version(current)) {
+        (Some(candidate_v), Some(current_v)) => candidate_v > current_v,
+        _ => candidate > current,
+    }
 }
 
 /// Runs a download through the unified yt-dlp native binary engine with live progress streaming.
@@ -237,6 +326,28 @@ async fn run_download_job(
     use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
     debug_log!("Starting download job #{}: url={:?}, video_selected={}, format={}", download_id, url, video_selected, if video_selected { video_container_ext } else { audio_ext });
+    let _ = output
+        .send(cosmic::Action::App(Message::DownloadStage {
+            id: download_id,
+            stage: DownloadStage::Preparing,
+        }))
+        .await;
+
+    if let Some(reason) = unsupported_download_reason(url) {
+        let url_owned = url.to_owned();
+        tokio::spawn(async move {
+            let title = if is_spotify_url(&url_owned) {
+                "Spotify protegido por DRM"
+            } else if is_tiktok_url(&url_owned) {
+                "TikTok não suportado pelo extractor"
+            } else {
+                "Download indisponível"
+            };
+            let _ = notify.summary(title).body(reason).show_async().await;
+        });
+        let _ = output.send(cosmic::Action::App(Message::Finished(download_id))).await;
+        return;
+    }
 
     // Detect if this is a playlist URL
     let is_playlist = url.contains("list=") || url.contains("/playlist");
@@ -247,11 +358,15 @@ async fn run_download_job(
     title_cmd
         .kill_on_drop(true)
         .arg("--force-ipv4")
-        .arg("--extractor-args").arg("youtube:player_client=default,web_music,mweb,ios")
         .arg("--print").arg("%(title)s")
         .arg("--no-warnings")
         .arg("--no-playlist")
         .stdout(std::process::Stdio::piped());
+    if is_youtube_url(url) {
+        title_cmd
+            .arg("--extractor-args")
+            .arg("youtube:player_client=default,web_music,mweb,ios");
+    }
     if let Some(deno_path) = deno_runtime_path() {
         title_cmd
             .arg("--js-runtimes")
@@ -325,9 +440,11 @@ async fn run_download_job(
     } else {
         debug_log!("Bundled Deno runtime was not found");
     }
-    // `web_music` makes Music URLs use their dedicated Innertube client;
-    // the remaining clients provide fallbacks when one is rate-limited.
-    cmd.arg("--extractor-args").arg("youtube:player_client=default,web_music,mweb,ios");
+    if is_youtube_url(url) {
+        // `web_music` makes Music URLs use their dedicated Innertube client;
+        // the remaining clients provide fallbacks when one is rate-limited.
+        cmd.arg("--extractor-args").arg("youtube:player_client=default,web_music,mweb,ios");
+    }
     cmd.arg("--socket-timeout").arg("30");
     cmd.arg("--retries").arg("10");
     cmd.arg("--fragment-retries").arg("10");
@@ -378,29 +495,25 @@ async fn run_download_job(
         if has_ffprobe && !economy_mode {
             cmd.arg("--embed-thumbnail");
         }
-        // Subtitle flags based on user selection (only for video)
-        if subtitle_mode != SubtitleMode::Off {
+        // Subtitle flags based on user selection (only for video and YouTube).
+        // Non-YouTube extractors do not reliably expose YouTube subtitle metadata,
+        // and applying the YouTube-only flags there can trigger extractor errors.
+        if subtitle_mode != SubtitleMode::Off && is_youtube_url(url) {
             let sub_fmt = if video_container_ext == "mkv" {
                 "ass/srt/best"
             } else {
                 "vtt/best"
             };
-            cmd.arg("--write-sub");
-            cmd.arg("--write-auto-sub");
-            // Downloading every automatic language makes hundreds of requests
-            // and can trigger YouTube's rate limit before the video starts.
-            // Prefer Portuguese and English, including regional variants.
-            cmd.arg("--sub-langs").arg("pt-BR,pt,en.*");
-            // A subtitle is optional: do not fail the video when a subtitle
-            // server rate-limits or does not provide the selected language.
+
+            cmd.arg("--sub-langs").arg("pt-BR,pt,en-US");
             cmd.arg("--ignore-errors");
             cmd.arg("--sleep-subtitles").arg("2");
+
+            // Both modes download the subtitle so ffmpeg can embed it.
             cmd.arg("--embed-subs");
             cmd.arg("--sub-format").arg(sub_fmt);
-            if subtitle_mode == SubtitleMode::EmbeddedAndVtt {
-                // Keep the separate .vtt file alongside the video
-                cmd.arg("--keep-subs");
-            }
+            cmd.arg("--write-sub");
+            cmd.arg("--write-auto-sub");
         }
         cmd.arg("--add-metadata");
         cmd.arg("--parse-metadata").arg("%(uploader)s:%(artist)s");
@@ -451,6 +564,12 @@ async fn run_download_job(
     cmd.stderr(std::process::Stdio::piped());
 
     debug_log!("Spawning yt-dlp command: {:?}", cmd);
+    let _ = output
+        .send(cosmic::Action::App(Message::DownloadStage {
+            id: download_id,
+            stage: DownloadStage::Downloading,
+        }))
+        .await;
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -464,12 +583,22 @@ async fn run_download_job(
         }
     };
 
+    let stderr_log = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
+
     // Continuously drain stderr to avoid Linux pipe buffer deadlock (64KB)
     if let Some(stderr) = child.stderr.take() {
         let mut reader = tokio::io::BufReader::new(stderr).lines();
+        let stderr_log_clone = stderr_log.clone();
         tokio::spawn(async move {
             while let Ok(Some(line)) = reader.next_line().await {
                 debug_log!("[yt-dlp stderr #{}] {}", download_id, line);
+                let mut guard = stderr_log_clone.lock().await;
+                guard.push(line);
+                let len = guard.len();
+                if len > 25 {
+                    let retain_from = len - 25;
+                    guard.drain(..retain_from);
+                }
             }
         });
     }
@@ -482,7 +611,14 @@ async fn run_download_job(
             use cosmic::iced::futures::SinkExt as _;
             while let Ok(Some(line)) = reader.next_line().await {
                 debug_log!("[yt-dlp stdout #{}] {}", download_id, line);
-                if line.contains("[Merger]") || line.contains("[ExtractAudio]") || line.contains("[Fixup]") || line.contains("[ffmpeg]") || line.contains("[VideoRemuxer]") {
+                if line.contains("Downloading subtitles") || line.contains("Writing video subtitles") {
+                    let _ = progress_out
+                        .send(cosmic::Action::App(Message::DownloadStage {
+                            id: download_id,
+                            stage: DownloadStage::Subtitles,
+                        }))
+                        .await;
+                } else if line.contains("[Merger]") || line.contains("[ExtractAudio]") || line.contains("[Fixup]") || line.contains("[ffmpeg]") || line.contains("[VideoRemuxer]") {
                     let _ = progress_out.send(cosmic::Action::App(Message::DownloadProgress {
                         id: download_id,
                         percent: 100.0,
@@ -492,6 +628,12 @@ async fn run_download_job(
                         total_bytes: 0,
                         is_post_processing: true,
                     })).await;
+                    let _ = progress_out
+                        .send(cosmic::Action::App(Message::DownloadStage {
+                            id: download_id,
+                            stage: DownloadStage::PostProcessing,
+                        }))
+                        .await;
                 } else if line.contains("[download] Downloading item") || line.contains("[download] Downloading video") {
                     // Playlist item progress
                     if let Some(item_idx) = line.find("item ") {
@@ -535,6 +677,10 @@ async fn run_download_job(
     };
     debug_log!("Download #{} exited with status: {:?}", download_id, status);
     cleanup_zero_and_temp_files(output_dir_ref).await;
+
+    if video_selected && subtitle_mode == SubtitleMode::Embedded {
+        cleanup_subtitle_sidecars(output_dir_ref, &display_title).await;
+    }
 
     // Safety cleanup: If an audio download occurred and orphaned thumbnail files (.webp / .png)
     // were left behind, remove them to keep the user's music folder clean.
@@ -591,12 +737,46 @@ async fn run_download_job(
     }
 
     if status.map_or(false, |s| s.success()) {
+        let subtitle_warning = if subtitle_mode != SubtitleMode::Off
+            && subtitle_rate_limit_detected(&stderr_log).await
+        {
+            Some(fl_str!("subtitle-partial").to_string())
+        } else {
+            None
+        };
         tokio::spawn(async move {
-            let _ = notify.summary(&fl_str!("finished-download", title = display_title)).show_async().await;
+            let mut notification = notify.summary(&fl_str!("finished-download", title = display_title));
+            if let Some(body) = subtitle_warning {
+                notification = notification.body(&body);
+            }
+            let _ = notification.show_async().await;
         });
     } else {
+        let stderr_lines = stderr_log.lock().await;
+        let joined = stderr_lines.join("\n");
+        let friendly = if joined.contains("DRM") {
+            Some("Este site usa DRM e não pode ser baixado por este applet.")
+        } else if is_tiktok_url(url) {
+            Some("TikTok pode falhar por limitação do extractor do yt-dlp. Tente outro link ou atualize o yt-dlp.")
+        } else {
+            None
+        };
+        drop(stderr_lines);
+
+        let url_owned = url.to_owned();
         tokio::spawn(async move {
-            let _ = notify.summary(&fl_str!("download-failed", title = display_title)).show_async().await;
+            if let Some(body) = friendly {
+                let title = if is_spotify_url(&url_owned) {
+                    "Spotify protegido por DRM"
+                } else if is_tiktok_url(&url_owned) {
+                    "TikTok não suportado pelo extractor"
+                } else {
+                    "Download indisponível"
+                };
+                let _ = notify.summary(title).body(body).show_async().await;
+            } else {
+                let _ = notify.summary(&fl_str!("download-failed", title = display_title)).show_async().await;
+            }
         });
     }
 
@@ -682,6 +862,7 @@ pub struct ActiveDownload {
     pub total_bytes: u64,
     pub is_post_processing: bool,
     pub is_audio: bool,
+    pub stage: DownloadStage,
     // Playlist tracking (None for single-video downloads)
     pub playlist_current: Option<u32>,
     pub playlist_total: Option<u32>,
@@ -717,6 +898,7 @@ pub struct Ytdlp {
     next_download_id: u32,
     cancel_senders: HashMap<u32, tokio::sync::oneshot::Sender<()>>,
     show_platforms: bool,
+    show_about: bool,
     
     // Economy mode for data saving
     economy_mode: bool,
@@ -758,6 +940,10 @@ pub enum Message {
         total_bytes: u64,
         is_post_processing: bool,
     },
+    DownloadStage {
+        id: u32,
+        stage: DownloadStage,
+    },
     /// Update playlist per-item progress counter
     PlaylistProgress {
         id: u32,
@@ -767,8 +953,9 @@ pub enum Message {
     },
     Finished(u32),
     TogglePlatforms,
+    ToggleAbout,
     /// Surface action forwarded from popup_dropdown
-    SurfaceAction(cosmic::surface::Action),
+    SurfaceAction(cosmic::surface::Action<Message>),
     /// Toggle economy mode for data saving
     #[allow(dead_code)]
     ToggleEconomyMode,
@@ -905,16 +1092,19 @@ impl Application for Ytdlp {
         };
 
         let mut content = column![
-            // URL input row + platforms toggle button + update check button
+            // Information buttons above the URL field
             row![
-                text_input(fl!("url"), &self.url)
-                    .on_input(Message::EnterURL)
-                    .width(Length::Fill),
                 cosmic::widget::tooltip(
                     cosmic::widget::button::icon(
                         cosmic::widget::icon::from_name("help-about-symbolic")
                     )
-                    .on_press(Message::TogglePlatforms),
+                    .on_press(Message::ToggleAbout),
+                    cosmic::widget::text::body(fl!("about-tooltip")),
+                    cosmic::widget::tooltip::Position::Bottom,
+                ),
+                cosmic::widget::tooltip(
+                    cosmic::widget::button::standard(fl!("platforms-button"))
+                        .on_press(Message::TogglePlatforms),
                     cosmic::widget::text::body(fl!("platforms-tooltip")),
                     cosmic::widget::tooltip::Position::Bottom,
                 ),
@@ -928,6 +1118,10 @@ impl Application for Ytdlp {
             .spacing(space_xxs)
             .apply(padded_control)
             .width(Length::Fill),
+            text_input(fl!("url"), &self.url)
+                .on_input(Message::EnterURL)
+                .apply(padded_control)
+                .width(Length::Fill),
             // Custom file name input (optional)
             text_input(fl!("filename"), &self.custom_name)
                 .on_input(Message::EnterCustomName)
@@ -983,12 +1177,16 @@ impl Application for Ytdlp {
             content = content.push(self.view_platforms());
         }
 
+        if self.show_about {
+            content = content.push(self.view_about());
+        }
+
         // Append a progress row for each active download
         for dl in &self.active_downloads {
             content = content.push(self.view_progress(dl));
         }
 
-        let scrollable_content = cosmic::widget::scrollable(content)
+        let scrollable_content = cosmic::widget::scrollable(content.width(Length::Fixed(480.0)))
             .height(Length::Shrink)
             .width(Length::Fill);
 
@@ -1016,7 +1214,7 @@ impl Application for Ytdlp {
                             );
                             popup_settings.positioner.size_limits = Limits::NONE
                                 .max_width(800.0)
-                                .min_width(320.0)
+                                .min_width(440.0)
                                 .min_height(200.0)
                                 .max_height(850.0);
                             popup_settings
@@ -1117,6 +1315,7 @@ impl Application for Ytdlp {
                     total_bytes: 0,
                     is_post_processing: false,
                     is_audio: !video_selected,
+                    stage: DownloadStage::Preparing,
                     playlist_current: None,
                     playlist_total: None,
                     playlist_title: None,
@@ -1196,6 +1395,12 @@ impl Application for Ytdlp {
                     dl.is_post_processing = is_post_processing;
                 }
             }
+            Message::DownloadStage { id, stage } => {
+                if let Some(dl) = self.active_downloads.iter_mut().find(|d| d.id == id) {
+                    dl.stage = stage;
+                    dl.is_post_processing = stage == DownloadStage::PostProcessing;
+                }
+            }
             Message::PlaylistProgress { id, current, total, video_title } => {
                 if let Some(dl) = self.active_downloads.iter_mut().find(|d| d.id == id) {
                     dl.playlist_current = Some(current);
@@ -1220,6 +1425,9 @@ impl Application for Ytdlp {
             Message::TogglePlatforms => {
                 self.show_platforms = !self.show_platforms;
             }
+            Message::ToggleAbout => {
+                self.show_about = !self.show_about;
+            }
             Message::ToggleEconomyMode => {
                 self.economy_mode = !self.economy_mode;
             }
@@ -1236,6 +1444,7 @@ impl Application for Ytdlp {
             }
             Message::UpdateCheckResult(result) => {
                 self.is_checking_updates = false;
+                self.update_available = None;
                 let current_version = format!("v{}", env!("CARGO_PKG_VERSION"));
                 match result {
                     Ok(Some(release)) => {
@@ -1308,6 +1517,34 @@ impl Application for Ytdlp {
 // ---------------------------------------------------------------------------
 
 impl Ytdlp {
+    fn view_about(&self) -> Element<'_, Message> {
+        let Spacing {
+            space_xxs, space_xs, space_s, ..
+        } = cosmic::theme::active().cosmic().spacing;
+
+        column![
+            padded_control(divider::horizontal::default()).padding([space_xxs, space_s]),
+            row![
+                cosmic::widget::icon::from_name("Dixycat-yt-dlp-icon")
+                    .size(64)
+                    .icon(),
+                column![
+                    cosmic::widget::text::title4("Dixycat-ext-cosmic-yt-dlp"),
+                    cosmic::widget::text::body(fl!("about-summary")),
+                    cosmic::widget::text::caption(fl!("about-license")),
+                ]
+                .spacing(space_xxs)
+                .width(Length::Fill),
+            ]
+            .spacing(space_s)
+            .align_y(Alignment::Center)
+            .apply(padded_control),
+            padded_control(divider::horizontal::default()).padding([space_xxs, space_s]),
+        ]
+        .spacing(space_xs)
+        .into()
+    }
+
     /// Renders the expandable list of supported video & audio platforms.
     fn view_platforms(&self) -> Element<'_, Message> {
         let Spacing {
@@ -1318,7 +1555,6 @@ impl Ytdlp {
             padded_control(divider::horizontal::default()).padding([space_xxs, space_s]),
             row![
                 cosmic::widget::text::body("▶ YouTube"),
-                cosmic::widget::text::body("🎵 TikTok"),
                 cosmic::widget::text::body("📸 Instagram"),
             ]
             .spacing(space_s)
@@ -1333,7 +1569,6 @@ impl Ytdlp {
             row![
                 cosmic::widget::text::body("🔵 Facebook"),
                 cosmic::widget::text::body("🔴 Reddit"),
-                cosmic::widget::text::body("🟢 Spotify"),
             ]
             .spacing(space_s)
             .apply(padded_control),
@@ -1578,13 +1813,17 @@ impl Ytdlp {
             None
         };
 
-        let status_line = if dl.is_post_processing {
-            if dl.is_audio {
-                fl!("post-processing-audio")
-            } else {
-                fl!("post-processing")
+        let status_line = match dl.stage {
+            DownloadStage::Preparing => fl!("preparing-download"),
+            DownloadStage::Subtitles => fl!("downloading-subtitles"),
+            DownloadStage::PostProcessing => {
+                if dl.is_audio {
+                    fl!("post-processing-audio")
+                } else {
+                    fl!("post-processing")
+                }
             }
-        } else {
+            DownloadStage::Downloading => {
             let eta_text = match dl.eta_secs {
                 Some(secs) => {
                     let mins = secs / 60;
@@ -1601,6 +1840,7 @@ impl Ytdlp {
                 "{:.1} MB/s  ──  {:.0}%  ──  {}",
                 dl.speed_mbps, dl.percent, eta_text
             )
+            }
         };
 
         // Format file size: "1.2 MB / 45.6 MB" or "1.2 MB"
@@ -1660,6 +1900,19 @@ impl Ytdlp {
 // Update checking and installation functions
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
+mod tests {
+    use super::is_version_newer;
+
+    #[test]
+    fn semantic_version_compare_handles_major_minor_and_patch() {
+        assert!(is_version_newer("v0.10.0", "v0.9.9"));
+        assert!(is_version_newer("v1.2.3", "v1.2.2"));
+        assert!(!is_version_newer("v0.4.2", "v0.4.2"));
+        assert!(!is_version_newer("v1.2.3", "v1.2.4"));
+    }
+}
+
 /// Checks GitHub releases for updates
 async fn check_for_updates() -> Result<Option<ReleaseInfo>, String> {
     let client = reqwest::Client::builder()
@@ -1690,9 +1943,11 @@ async fn check_for_updates() -> Result<Option<ReleaseInfo>, String> {
     
     let current_version = env!("CARGO_PKG_VERSION");
     let current_tag = format!("v{}", current_version);
-    
-    // Compare versions - simple string comparison for now
-    if tag_name <= current_tag {
+
+    // Ignore release tags equal to or older than the app version. This avoids false
+    // positives when the user is running a locally packaged build that is newer than
+    // the last public GitHub release.
+    if tag_name == current_tag || !is_version_newer(&tag_name, &current_tag) {
         return Ok(None);
     }
     

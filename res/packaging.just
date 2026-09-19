@@ -26,6 +26,11 @@ icons-sym-src := 'res' / 'icons' / 'hicolor' / 'scalable' / 'apps' / icons-sym
 icons-sym-path := 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / icons-sym
 icons-sym-dst := base-dir / icons-sym-path
 
+mascot-icon := 'Dixycat-yt-dlp-icon.png'
+mascot-icon-src := 'res' / 'icons' / 'hicolor' / 'scalable' / 'apps' / mascot-icon
+mascot-icon-path := 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / mascot-icon
+mascot-icon-dst := base-dir / mascot-icon-path
+
 deno-src := 'res' / 'deno'
 deno-path := 'lib' / name / 'deno'
 deno-dst := base-dir / deno-path
@@ -47,6 +52,7 @@ install: prepare-runtime
     install -Dm0755 {{bin-src}} {{bin-dst}}
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
+    install -Dm0644 {{mascot-icon-src}} {{mascot-icon-dst}}
     install -Dm0644 {{icons-src}} {{icons-dst}}
     install -Dm0644 {{icons-sym-src}} {{icons-sym-dst}}
     install -Dm0755 {{deno-src}} {{deno-dst}}
@@ -57,6 +63,7 @@ uninstall:
     rm {{bin-dst}}
     rm {{desktop-dst}}
     rm {{metainfo-dst}}
+    rm {{mascot-icon-dst}}
     rm {{icons-dst}}
     rm {{icons-sym-dst}}
     rm {{deno-dst}}
@@ -68,6 +75,7 @@ install-local: prepare-runtime
     install -Dm0755 {{bin-src}} ~/.local/bin/{{name}}
     install -Dm0644 {{desktop-src}} ${XDG_DATA_HOME:-~/.local/share}/{{desktop-path}}
     install -Dm0644 {{metainfo-src}} ${XDG_DATA_HOME:-~/.local/share}/{{metainfo-path}}
+    install -Dm0644 {{mascot-icon-src}} ${XDG_DATA_HOME:-~/.local/share}/{{mascot-icon-path}}
     install -Dm0644 {{icons-src}} ${XDG_DATA_HOME:-~/.local/share}/{{icons-path}}
     install -Dm0644 {{icons-sym-src}} ${XDG_DATA_HOME:-~/.local/share}/{{icons-sym-path}}
     install -Dm0755 {{deno-src}} ~/.local/lib/{{name}}/deno
@@ -77,6 +85,7 @@ uninstall-local:
     rm ~/.local/bin/{{name}}
     rm ${XDG_DATA_HOME:-~/.local/share}/{{desktop-path}}
     rm ${XDG_DATA_HOME:-~/.local/share}/{{metainfo-path}}
+    rm ${XDG_DATA_HOME:-~/.local/share}/{{mascot-icon-path}}
     rm ${XDG_DATA_HOME:-~/.local/share}/{{icons-path}}
     rm ${XDG_DATA_HOME:-~/.local/share}/{{icons-sym-path}}
     rm ~/.local/lib/{{name}}/deno

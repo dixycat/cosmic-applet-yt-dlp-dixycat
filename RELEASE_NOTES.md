@@ -1,3 +1,23 @@
+## 🚀 O que há de novo na v0.4.3 / What's New in v0.4.3
+
+### 🇧🇷 Português
+- 🧩 **Libcosmic atualizado:** Compatibilidade com o commit mais recente do COSMIC.
+- 💬 **Legendas mais eficientes:** Solicita português e inglês dos EUA sem variantes duplicadas.
+- 🚦 **Progresso mais claro:** Mostra preparação, legendas e pós-processamento.
+- 🧹 **Limpeza segura:** Remove apenas os arquivos `.vtt` do download atual.
+- ⚠️ **Falhas parciais:** Limites HTTP 429 do YouTube não cancelam o vídeo.
+- 🐱 **Identidade visual:** Adicionado o mascote Dixycat na seção Sobre.
+
+### 🇺🇸 English
+- 🧩 **Updated libcosmic:** Compatibility with the latest COSMIC commit.
+- 💬 **More efficient subtitles:** Requests Portuguese and US English without duplicate variants.
+- 🚦 **Clearer progress:** Shows preparation, subtitles, and post-processing stages.
+- 🧹 **Safe cleanup:** Removes only `.vtt` files belonging to the current download.
+- ⚠️ **Partial failures:** YouTube HTTP 429 limits no longer cancel the video.
+- 🐱 **Visual identity:** Added the Dixycat mascot to the About section.
+
+---
+
 ## 🚀 O que há de novo na v0.4.2 / What's New in v0.4.2
 
 ### 🇧🇷 Português

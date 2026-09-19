@@ -2,6 +2,7 @@ PENDENTE
 - Validar o reinício automático após uma atualização da próxima versão publicada.
 - Validar o runtime Deno incluído no pacote v0.4.2 com um download do YouTube.
 - Testar downloads com logs de depuração no TikTok e DeviantArt.
+- Testar a nova versão do libcosmic no painel COSMIC após reinstalar o pacote.
 
 CONCLUÍDO
 - Preparada e publicada a versão v0.4.0 no GitHub.
@@ -14,3 +15,8 @@ CONCLUÍDO
 - Corrigido o reinício após atualização: o processo passa a executar a nova versão via `exec`, em vez de apenas fechar e desaparecer do painel.
 - Testados em modo de depuração: YouTube Music, YouTube e Instagram.
 - Corrigida a atualização do pacote .deb; a instalação da v0.4.0 foi confirmada.
+- Atualizado o libcosmic para o commit 87ab8179 e adaptado SurfaceAction à nova API.
+- Separada a limpeza de legendas: o modo embutido remove apenas os .vtt do vídeo atual.
+- Adicionadas fases visíveis de preparação, download de legendas e pós-processamento.
+- Adicionado aviso quando o YouTube limita uma faixa de legenda por HTTP 429.
+- Confirmado em log que legendas disponíveis são embutidas no MP4 com status de download 0.

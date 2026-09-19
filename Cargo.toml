@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-applet-yt-dlp-dixycat"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 authors = ["Dixycat <felix-the-cat177>"]
 license = "GPL-3.0-only"
@@ -38,6 +38,7 @@ assets = [
     ["target/release/cosmic-applet-yt-dlp-dixycat", "usr/bin/", "755"],
     ["res/io.github.felix_the_cat177.CosmicAppletYtDlp.desktop", "usr/share/applications/", "644"],
     ["res/io.github.felix_the_cat177.CosmicAppletYtDlp.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["res/icons/hicolor/scalable/apps/Dixycat-yt-dlp-icon.png", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["res/icons/hicolor/scalable/apps/io.github.felix_the_cat177.CosmicAppletYtDlp.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["res/icons/hicolor/scalable/apps/io.github.felix_the_cat177.CosmicAppletYtDlp-symbolic.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["res/deno", "usr/lib/cosmic-applet-yt-dlp-dixycat/deno", "755"],
@@ -51,6 +52,7 @@ assets = [
     { source = "LICENSE", dest = "/usr/share/doc/cosmic-applet-yt-dlp-dixycat/LICENSE", doc = true, mode = "644" },
     { source = "res/*.metainfo.xml", dest = "/usr/share/metainfo/", mode = "644" },
     { source = "res/*.desktop", dest = "/usr/share/applications/", mode = "644" },
+    { source = "res/icons/hicolor/scalable/apps/Dixycat-yt-dlp-icon.png", dest = "/usr/share/icons/hicolor/scalable/apps/", mode = "644" },
     { source = "res/icons/hicolor/scalable/apps/*.svg", dest = "/usr/share/icons/hicolor/scalable/apps/", mode = "644" },
     { source = "res/deno", dest = "/usr/lib/cosmic-applet-yt-dlp-dixycat/deno", mode = "755" },
     { source = "res/licenses/DENO-LICENSE", dest = "/usr/share/doc/cosmic-applet-yt-dlp-dixycat/DENO-LICENSE", doc = true, mode = "644" }
