@@ -20,3 +20,4 @@ CONCLUÍDO
 - Adicionadas fases visíveis de preparação, download de legendas e pós-processamento.
 - Adicionado aviso quando o YouTube limita uma faixa de legenda por HTTP 429.
 - Confirmado em log que legendas disponíveis são embutidas no MP4 com status de download 0.
+- Preparada a próxima release v0.5.0 com as melhorias do COSMIC, legendas e limpeza segura.

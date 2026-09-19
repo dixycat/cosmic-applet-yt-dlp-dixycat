@@ -2,6 +2,8 @@ REGISTRO DE ALTERACOES E PROXIMOS PASSOS
 Projeto: cosmic-applet-yt-dlp-dixycat
 Atualizado em: 2026-09-19
 
+Proxima release planejada: v0.5.0
+
 OBJETIVO DESTE ARQUIVO
 Este arquivo resume o que foi alterado durante a correcao dos bugs recentes,
 o que ja foi validado e o que ainda precisa ser conferido. Deve ser atualizado
