@@ -14,9 +14,11 @@
 </p>
 
 ---
+
 <p align="center">
   <b>Mascote do projeto</b>
 </p>
+
 ---
 
 ## 🎬 Demonstração em Vídeo atualizado 19/09/2026
