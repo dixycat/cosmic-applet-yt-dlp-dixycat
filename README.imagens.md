@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="./res/compilado-no-celeron-N4500.png" alt="Dixycat-ext-cosmic-yt-dlp Compilado no celeron N4500 " width="700" />
+  <img src="./res/compilado-no-celeron-N4500.png" alt="Dixycat-ext-cosmic-yt-dlp Compilado no celeron N4500 " width="400" />
   <p align="center">
     Foi compilado no Celeron N4500 de apenas dois core!
   </p>
