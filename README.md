@@ -1,4 +1,4 @@
-# COSMIC Applet yt-dlp
+# Dixycat-ext-cosmic-yt-dlp
 
 <p align="center">
   <a href="./README.md"><b>English</b></a> |
