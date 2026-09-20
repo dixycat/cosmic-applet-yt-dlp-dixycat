@@ -4,6 +4,8 @@
 
 <p align="center">
   <img src="./res/Screenshot_2026-08-30_23-23-57.png" alt="COSMIC Applet yt-dlp screenshot" width="700" />
+</p>
+<p align="center">
   <img src="./res/compilado-no-celeron-N4500.png" alt="Dixycat-ext-cosmic-yt-dlp Compilado no celeron N4500 " width="700" />
   Foi compilado no Celeron N4500 de apenas dois core!
 </p>
