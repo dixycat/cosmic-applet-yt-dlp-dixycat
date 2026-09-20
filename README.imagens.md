@@ -16,7 +16,7 @@
 ---
 
 <p align="center">
-  <img src=".res/icons/hicolor/scalable/apps/Dixycat-yt-dlp-icon.png" alt="Dixycat-ext-cosmic-yt-dlp Compilado no celeron N4500 " width="700" />
+  <img src="./res/icons/hicolor/scalable/apps/Dixycat-yt-dlp-icon.png" alt="Dixycat-ext-cosmic-yt-dlp  mascote" width="700" />
   <p align="center">
     Mascote do Projeto
   </p>
