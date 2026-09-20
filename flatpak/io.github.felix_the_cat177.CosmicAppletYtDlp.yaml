@@ -1,4 +1,4 @@
-app-id: io.github.felix_the_cat177.CosmicAppletYtDlp
+app-id: io.github.dixycat.ext.cosmic.yt.dlp
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
