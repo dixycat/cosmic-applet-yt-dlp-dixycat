@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="./res/compilado-no-celeron-N4500.png" alt="Dixycat-ext-cosmic-yt-dlp Compilado no celeron N4500 " width="60" />
+  <img src="./res/compilado-no-celeron-N4500.png" alt="Dixycat-ext-cosmic-yt-dlp Compilado no celeron N4500 " width="70" />
   <p align="center">
     Foi compilado no Celeron N4500 de apenas dois core!
   </p>
@@ -16,7 +16,7 @@
 ---
 
 <p align="center">
-  <img src="./res/icons/hicolor/scalable/apps/Dixycat-yt-dlp-icon.png" alt="Dixycat-ext-cosmic-yt-dlp  mascote" width="700" />
+  <img src="./res/icons/hicolor/scalable/apps/Dixycat-yt-dlp-icon.png" alt="Dixycat-ext-cosmic-yt-dlp  mascote" width="200" />
   <p align="center">
     Mascote do Projeto
   </p>
