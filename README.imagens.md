@@ -16,7 +16,7 @@
 ---
 
 ## 🎬 Demonstração em Vídeo atualizado 19/09/2026
-https://github.com/felix-the-cat177/cosmic-applet-yt-dlp-dixycat/raw/refs/heads/master/res/2026-08-30%2022-42-39.mp4
+https://github.com/user-attachments/assets/900f3e96-1963-4bee-b4c5-f9aeab04a5c6
 
 
 ## 🎬 Demonstração em Vídeo antigo
