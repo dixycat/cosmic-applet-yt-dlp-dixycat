@@ -132,10 +132,30 @@ impl Display for AudioQuality {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AudioQuality::Best => write!(f, "Highest"),
-            AudioQuality::High => write!(f, "192kbps"),
-            AudioQuality::Medium => write!(f, "128kbps"),
-            AudioQuality::Low => write!(f, "96kbps"),
+            AudioQuality::High => write!(f, "High"),
+            AudioQuality::Medium => write!(f, "Medium"),
+            AudioQuality::Low => write!(f, "Low"),
             AudioQuality::Worst => write!(f, "Lowest"),
+        }
+    }
+}
+
+impl AudioQuality {
+    pub fn ffmpeg_quality(&self, economy_mode: bool) -> &'static str {
+        if economy_mode {
+            match self {
+                AudioQuality::Best | AudioQuality::High => "5",
+                AudioQuality::Medium => "7",
+                AudioQuality::Low | AudioQuality::Worst => "9",
+            }
+        } else {
+            match self {
+                AudioQuality::Best => "0",
+                AudioQuality::High => "2",
+                AudioQuality::Medium => "5",
+                AudioQuality::Low => "7",
+                AudioQuality::Worst => "9",
+            }
         }
     }
 }
@@ -169,16 +189,24 @@ pub enum AudioCodec {
 }
 
 impl AudioCodec {
-    /// Returns the recommended file extension for this audio codec.
-    pub fn extension(&self) -> &'static str {
+    /// Returns the yt-dlp audio format, preserving the source format for `Any`.
+    pub fn yt_dlp_format(&self) -> &'static str {
         match self {
             AudioCodec::MP3 => "mp3",
             AudioCodec::AAC => "m4a",
             AudioCodec::Opus => "opus",
             AudioCodec::FLAC => "flac",
             AudioCodec::WAV => "wav",
-            AudioCodec::Any => "m4a",
+            AudioCodec::Any => "best",
         }
+    }
+
+    pub fn converts_audio(&self) -> bool {
+        !matches!(self, AudioCodec::Any)
+    }
+
+    pub fn supports_embedded_thumbnail(&self) -> bool {
+        !matches!(self, AudioCodec::WAV)
     }
 }
 
@@ -190,7 +218,7 @@ impl Display for AudioCodec {
             AudioCodec::Opus => write!(f, "Opus"),
             AudioCodec::FLAC => write!(f, "FLAC"),
             AudioCodec::WAV => write!(f, "WAV"),
-            AudioCodec::Any => write!(f, "Any"),
+            AudioCodec::Any => write!(f, "Original"),
         }
     }
 }
@@ -205,5 +233,54 @@ impl From<AudioCodec> for YtAudioCodec {
             AudioCodec::WAV => YtAudioCodec::Any,
             AudioCodec::Any => YtAudioCodec::Any,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AudioCodec, AudioQuality};
+
+    #[test]
+    fn any_audio_codec_preserves_the_best_available_source_format() {
+        assert_eq!(AudioCodec::Any.yt_dlp_format(), "best");
+        assert_eq!(AudioCodec::Any.to_string(), "Original");
+        assert!(!AudioCodec::Any.converts_audio());
+        assert!(AudioCodec::MP3.converts_audio());
+    }
+
+    #[test]
+    fn audio_quality_labels_do_not_claim_fixed_bitrates() {
+        assert_eq!(AudioQuality::Best.to_string(), "Highest");
+        assert_eq!(AudioQuality::High.to_string(), "High");
+        assert_eq!(AudioQuality::Medium.to_string(), "Medium");
+        assert_eq!(AudioQuality::Low.to_string(), "Low");
+        assert_eq!(AudioQuality::Worst.to_string(), "Lowest");
+    }
+
+    #[test]
+    fn audio_quality_maps_to_ffmpeg_quality_values() {
+        assert_eq!(AudioQuality::Best.ffmpeg_quality(false), "0");
+        assert_eq!(AudioQuality::High.ffmpeg_quality(false), "2");
+        assert_eq!(AudioQuality::Medium.ffmpeg_quality(false), "5");
+        assert_eq!(AudioQuality::Low.ffmpeg_quality(false), "7");
+        assert_eq!(AudioQuality::Worst.ffmpeg_quality(false), "9");
+        assert_eq!(AudioQuality::Best.ffmpeg_quality(true), "5");
+    }
+
+    #[test]
+    fn thumbnail_embedding_support_covers_audio_codecs_that_support_covers() {
+        for codec in [
+            AudioCodec::MP3,
+            AudioCodec::AAC,
+            AudioCodec::Opus,
+            AudioCodec::FLAC,
+            AudioCodec::Any,
+        ] {
+            assert!(
+                codec.supports_embedded_thumbnail(),
+                "{codec} should support an embedded cover"
+            );
+        }
+        assert!(!AudioCodec::WAV.supports_embedded_thumbnail());
     }
 }

@@ -263,7 +263,12 @@ fn sanitize_custom_filename(name: &str) -> String {
     }
 }
 
-fn video_format_filter(economy_mode: bool, quality: VideoQuality, codec: VideoCodec) -> String {
+fn video_format_filter(
+    economy_mode: bool,
+    quality: VideoQuality,
+    codec: VideoCodec,
+    container: VideoContainer,
+) -> String {
     let max_height = if economy_mode {
         match quality {
             VideoQuality::Highest | VideoQuality::FHD | VideoQuality::HD => Some(360),
@@ -279,30 +284,37 @@ fn video_format_filter(economy_mode: bool, quality: VideoQuality, codec: VideoCo
         }
     };
 
-    if quality == VideoQuality::Lowest {
-        if let Some(codec) = video_codec_selector(codec) {
-            return format!("worstvideo[vcodec^={codec}]+worstaudio/worst[vcodec^={codec}]");
-        }
-        return "worstvideo+worstaudio/worst".to_string();
-    }
-
-    if let Some(codec) = video_codec_selector(codec) {
-        let height_filter = max_height
-            .map(|height| format!("[height<={height}]"))
-            .unwrap_or_default();
-        return format!(
-            "bestvideo{height_filter}[vcodec^={codec}]+bestaudio/best{height_filter}[vcodec^={codec}]"
-        );
-    }
-
     let height_filter = max_height
         .map(|height| format!("[height<={height}]"))
         .unwrap_or_default();
-    if height_filter.is_empty() {
-        "bestvideo+bestaudio/best".to_string()
+    let container_video_codec = if container == VideoContainer::MP4 {
+        Some("avc1")
     } else {
-        format!("bestvideo{height_filter}+bestaudio/best{height_filter}/best")
+        video_codec_selector(codec)
+    };
+    let video_extension = match container {
+        VideoContainer::MP4 => "[ext=mp4]",
+        VideoContainer::WebM => "[ext=webm]",
+        VideoContainer::MKV => "",
+    };
+    let audio_extension = match container {
+        VideoContainer::MP4 => "[ext=m4a]",
+        VideoContainer::WebM => "[ext=webm]",
+        VideoContainer::MKV => "",
+    };
+    let codec_filter = container_video_codec
+        .map(|codec| format!("[vcodec^={codec}]"))
+        .unwrap_or_default();
+    let video_filter = format!("{height_filter}{video_extension}{codec_filter}");
+    let fallback_filter = format!("{height_filter}{video_extension}{codec_filter}");
+
+    if quality == VideoQuality::Lowest {
+        return format!(
+            "worstvideo{video_filter}+worstaudio{audio_extension}/worst{fallback_filter}"
+        );
     }
+
+    format!("bestvideo{video_filter}+bestaudio{audio_extension}/best{fallback_filter}")
 }
 
 fn video_codec_selector(codec: VideoCodec) -> Option<&'static str> {
@@ -336,23 +348,32 @@ fn is_post_processing_line(line: &str) -> bool {
     .any(|marker| line.contains(marker))
 }
 
+fn download_stage_from_line(line: &str) -> Option<DownloadStage> {
+    if line.contains("Downloading subtitles")
+        || line.contains("Writing video subtitles")
+        || line.contains("Downloading video thumbnail")
+        || line.contains("Writing video thumbnail")
+    {
+        Some(DownloadStage::DownloadingAssets)
+    } else if is_post_processing_line(line) {
+        Some(DownloadStage::PostProcessing)
+    } else if line.contains("[download] Destination:")
+        || line.contains("[download] Downloading item")
+        || line.contains("[download] Downloading video")
+    {
+        Some(DownloadStage::Downloading)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DownloadStage {
     #[default]
     Preparing,
     Downloading,
-    Subtitles,
+    DownloadingAssets,
     PostProcessing,
-}
-
-/// Checks if python's `mutagen` package is available for embedding album cover art into Opus/FLAC.
-async fn has_python_mutagen() -> bool {
-    tokio::process::Command::new("python3")
-        .args(["-c", "import mutagen"])
-        .output()
-        .await
-        .map(|o| o.status.success())
-        .unwrap_or(false)
 }
 
 fn is_youtube_url(url: &str) -> bool {
@@ -408,10 +429,10 @@ async fn run_download_job(
     video_selected: bool,
     url: &str,
     custom_name: Option<String>,
-    video_container_ext: &str,
+    video_container: VideoContainer,
     downloader: &yt_dlp::Downloader,
     output_dir_ref: &std::path::Path,
-    audio_ext: &str,
+    audio_codec: AudioCodec,
     video_quality: VideoQuality,
     video_codec: VideoCodec,
     audio_quality: AudioQuality,
@@ -424,6 +445,7 @@ async fn run_download_job(
     use cosmic::iced::futures::SinkExt;
     use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
+    let video_container_ext = video_container.extension();
     debug_log!(
         "Starting download job #{}: url={:?}, video_selected={}, format={}",
         download_id,
@@ -432,7 +454,7 @@ async fn run_download_job(
         if video_selected {
             video_container_ext
         } else {
-            audio_ext
+            audio_codec.yt_dlp_format()
         }
     );
     let _ = output
@@ -601,7 +623,8 @@ async fn run_download_job(
 
     if video_selected {
         // Video format selection
-        let format_filter = video_format_filter(economy_mode, video_quality, video_codec);
+        let format_filter =
+            video_format_filter(economy_mode, video_quality, video_codec, video_container);
 
         cmd.arg("-f").arg(&format_filter);
 
@@ -645,37 +668,22 @@ async fn run_download_job(
     } else {
         // Audio extraction
         cmd.arg("-x");
-        cmd.arg("--audio-format").arg(audio_ext);
-        let audio_q = if economy_mode {
-            // Economy mode: lower bitrate to save data
-            match audio_quality {
-                AudioQuality::Best | AudioQuality::High => "5",
-                AudioQuality::Medium => "7",
-                AudioQuality::Low | AudioQuality::Worst => "9",
-            }
-        } else {
-            match audio_quality {
-                AudioQuality::Best => "0",
-                AudioQuality::High => "2",
-                AudioQuality::Medium => "5",
-                AudioQuality::Low => "7",
-                AudioQuality::Worst => "9",
-            }
-        };
-        cmd.arg("--audio-quality").arg(audio_q);
+        cmd.arg("--audio-format").arg(audio_codec.yt_dlp_format());
+        if audio_codec.converts_audio() {
+            cmd.arg("--audio-quality")
+                .arg(audio_quality.ffmpeg_quality(economy_mode));
+        }
         // Embed title, artist, album art (thumbnail) into audio file
         cmd.arg("--embed-metadata");
-        // For audio, ffmpeg natively embeds thumbnails into MP3 and M4A/AAC without extra dependencies.
-        // Formats like Opus and FLAC require python's 'mutagen' module. Without mutagen, yt-dlp fails
-        // with exit code 1 and leaves orphaned .webp/.png thumbnails behind.
-        // WAV does not support embedded thumbnails in yt-dlp.
-        let can_embed_audio_thumb = has_ffprobe
-            && !economy_mode
-            && match audio_ext {
-                "mp3" | "m4a" | "aac" => true,
-                "opus" | "flac" => has_python_mutagen().await,
-                _ => false,
-            };
+        let can_embed_audio_thumb =
+            has_ffprobe && !economy_mode && audio_codec.supports_embedded_thumbnail();
+        debug_log!(
+            "Audio thumbnail embedding for {:?}: enabled={} (ffprobe={}, economy_mode={})",
+            audio_codec,
+            can_embed_audio_thumb,
+            has_ffprobe,
+            economy_mode
+        );
         if can_embed_audio_thumb {
             cmd.arg("--embed-thumbnail");
         }
@@ -690,7 +698,9 @@ async fn run_download_job(
     cmd.arg("--paths")
         .arg(format!("home:{}", output_dir_ref.display()))
         .arg("--paths")
-        .arg(format!("temp:{}", temp_dir.display()));
+        .arg(format!("temp:{}", temp_dir.display()))
+        .arg("--paths")
+        .arg(format!("thumbnail:{}", temp_dir.display()));
     cmd.arg(url);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
@@ -756,26 +766,17 @@ async fn run_download_job(
             use cosmic::iced::futures::SinkExt as _;
             while let Ok(Some(line)) = reader.next_line().await {
                 debug_log!("[yt-dlp stdout #{}] {}", download_id, line);
-                if line.contains("Downloading subtitles")
-                    || line.contains("Writing video subtitles")
-                {
+                if let Some(stage) = download_stage_from_line(&line) {
                     let _ = progress_out
                         .send(cosmic::Action::App(Message::DownloadStage {
                             id: download_id,
-                            stage: DownloadStage::Subtitles,
+                            stage,
                         }))
                         .await;
-                } else if is_post_processing_line(&line) {
-                    let _ = progress_out
-                        .send(cosmic::Action::App(Message::DownloadStage {
-                            id: download_id,
-                            stage: DownloadStage::PostProcessing,
-                        }))
-                        .await;
-                } else if line.contains("[download] Downloading item")
+                }
+                if line.contains("[download] Downloading item")
                     || line.contains("[download] Downloading video")
                 {
-                    // Playlist item progress
                     if let Some(item_idx) = line.find("item ") {
                         let after = &line[item_idx + 5..];
                         if let Some(of_idx) = after.find(" of ") {
@@ -786,12 +787,6 @@ async fn run_download_job(
                                 .and_then(|s| s.parse::<u32>().ok())
                                 .unwrap_or(1);
                             let _ = progress_out
-                                .send(cosmic::Action::App(Message::DownloadStage {
-                                    id: download_id,
-                                    stage: DownloadStage::Downloading,
-                                }))
-                                .await;
-                            let _ = progress_out
                                 .send(cosmic::Action::App(Message::PlaylistProgress {
                                     id: download_id,
                                     current: cur,
@@ -801,7 +796,8 @@ async fn run_download_job(
                                 .await;
                         }
                     }
-                } else if let Some((percent, speed_mbps, eta_secs, dl_bytes, tot_bytes)) =
+                }
+                if let Some((percent, speed_mbps, eta_secs, dl_bytes, tot_bytes)) =
                     parse_ytdlp_progress_line(&line)
                 {
                     let _ = progress_out
@@ -850,34 +846,6 @@ async fn run_download_job(
 
     if video_selected && subtitle_mode == SubtitleMode::Embedded {
         cleanup_subtitle_sidecars(output_dir_ref, &display_title).await;
-    }
-
-    // Safety cleanup: If an audio download occurred and orphaned thumbnail files (.webp / .png)
-    // were left behind, remove them to keep the user's music folder clean.
-    if !video_selected {
-        if let Ok(mut entries) = tokio::fs::read_dir(output_dir_ref).await {
-            let mut audio_stems = std::collections::HashSet::new();
-            let mut img_candidates = Vec::new();
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let p = entry.path();
-                if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-                    if ext == audio_ext {
-                        if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
-                            audio_stems.insert(stem.to_string());
-                        }
-                    } else if ext == "webp" || ext == "png" {
-                        img_candidates.push(p);
-                    }
-                }
-            }
-            for img_path in img_candidates {
-                if let Some(stem) = img_path.file_stem().and_then(|s| s.to_str()) {
-                    if audio_stems.contains(stem) {
-                        let _ = tokio::fs::remove_file(img_path).await;
-                    }
-                }
-            }
-        }
     }
 
     // Check if download failed and attempt auto-update of yt-dlp
@@ -988,6 +956,18 @@ const VIDEO_CODECS: &[VideoCodec] = &[
     VideoCodec::Any,
 ];
 const VIDEO_CODEC_LABELS: &[&str] = &["AV1", "AVC1", "VP9", "Any"];
+const WEBM_VIDEO_CODECS: &[VideoCodec] = &[VideoCodec::AV1, VideoCodec::VP9, VideoCodec::Any];
+const WEBM_VIDEO_CODEC_LABELS: &[&str] = &["AV1", "VP9", "Any"];
+
+fn video_codec_options(
+    container: VideoContainer,
+) -> (&'static [VideoCodec], &'static [&'static str]) {
+    match container {
+        VideoContainer::MP4 => (&[VideoCodec::AVC1], &["AVC1"]),
+        VideoContainer::WebM => (WEBM_VIDEO_CODECS, WEBM_VIDEO_CODEC_LABELS),
+        VideoContainer::MKV => (VIDEO_CODECS, VIDEO_CODEC_LABELS),
+    }
+}
 
 const AUDIO_QUALITIES: &[AudioQuality] = &[
     AudioQuality::Best,
@@ -996,7 +976,7 @@ const AUDIO_QUALITIES: &[AudioQuality] = &[
     AudioQuality::Low,
     AudioQuality::Worst,
 ];
-const AUDIO_QUALITY_LABELS: &[&str] = &["Highest", "192kbps", "128kbps", "96kbps", "Lowest"];
+const AUDIO_QUALITY_LABELS: &[&str] = &["Highest", "High", "Medium", "Low", "Lowest"];
 
 const AUDIO_CODECS: &[AudioCodec] = &[
     AudioCodec::MP3,
@@ -1006,7 +986,7 @@ const AUDIO_CODECS: &[AudioCodec] = &[
     AudioCodec::WAV,
     AudioCodec::Any,
 ];
-const AUDIO_CODEC_LABELS: &[&str] = &["MP3", "AAC (M4A)", "Opus", "FLAC", "WAV", "Any"];
+const AUDIO_CODEC_LABELS: &[&str] = &["MP3", "AAC (M4A)", "Opus", "FLAC", "WAV", "Original"];
 
 // ---------------------------------------------------------------------------
 // Subtitle mode
@@ -1402,6 +1382,9 @@ impl Application for Ytdlp {
             Message::VideoContainerSelected(idx) => {
                 if let Some(&c) = VIDEO_CONTAINERS.get(idx) {
                     self.video_container = c;
+                    if c == VideoContainer::WebM && self.video_codec == VideoCodec::AVC1 {
+                        self.video_codec = VideoCodec::Any;
+                    }
                 }
             }
             Message::VideoQualitySelected(idx) => {
@@ -1415,7 +1398,8 @@ impl Application for Ytdlp {
                 }
             }
             Message::VideoCodecSelected(idx) => {
-                if let Some(&c) = VIDEO_CODECS.get(idx) {
+                let (codecs, _) = video_codec_options(self.video_container);
+                if let Some(&c) = codecs.get(idx) {
                     self.video_codec = c;
                 }
             }
@@ -1512,8 +1496,8 @@ impl Application for Ytdlp {
                     &self.audio_folder
                 });
                 let output_dir_ref = output_dir.clone();
-                let video_container_ext = self.video_container.extension();
-                let audio_ext = self.audio_codec.extension();
+                let video_container = self.video_container;
+                let audio_codec = self.audio_codec;
                 let video_quality = self.video_quality;
                 let video_codec = self.video_codec;
                 let audio_quality = self.audio_quality;
@@ -1537,10 +1521,10 @@ impl Application for Ytdlp {
                             video_selected,
                             &url,
                             custom_name,
-                            video_container_ext,
+                            video_container,
                             &downloader,
                             &output_dir_ref,
-                            audio_ext,
+                            audio_codec,
                             video_quality,
                             video_codec,
                             audio_quality,
@@ -1574,6 +1558,13 @@ impl Application for Ytdlp {
             }
             Message::DownloadStage { id, stage } => {
                 if let Some(dl) = self.active_downloads.iter_mut().find(|d| d.id == id) {
+                    if dl.stage != stage {
+                        dl.percent = 0.0;
+                        dl.speed_mbps = 0.0;
+                        dl.eta_secs = None;
+                        dl.downloaded_bytes = 0;
+                        dl.total_bytes = 0;
+                    }
                     dl.stage = stage;
                     dl.is_post_processing = stage == DownloadStage::PostProcessing;
                 }
@@ -1775,7 +1766,8 @@ impl Ytdlp {
         let video_quality_idx = VIDEO_QUALITIES
             .iter()
             .position(|&q| q == self.video_quality);
-        let video_codec_idx = VIDEO_CODECS.iter().position(|&c| c == self.video_codec);
+        let (video_codecs, video_codec_labels) = video_codec_options(self.video_container);
+        let video_codec_idx = video_codecs.iter().position(|&c| c == self.video_codec);
 
         let Spacing { space_xxs, .. } = cosmic::theme::active().cosmic().spacing;
 
@@ -1825,10 +1817,14 @@ impl Ytdlp {
             )
         };
 
-        let codec_dropdown: Element<'_, Message> = if let Some(pid) = popup_id {
+        let codec_control: Element<'_, Message> = if self.video_container == VideoContainer::MP4 {
+            body(fl!("video-codec-mp4"))
+                .width(Length::FillPortion(1))
+                .into()
+        } else if let Some(pid) = popup_id {
             Element::from(
                 cosmic::widget::dropdown::popup_dropdown(
-                    VIDEO_CODEC_LABELS,
+                    video_codec_labels,
                     video_codec_idx,
                     Message::VideoCodecSelected,
                     pid,
@@ -1840,7 +1836,7 @@ impl Ytdlp {
         } else {
             Element::from(
                 cosmic::widget::dropdown(
-                    VIDEO_CODEC_LABELS,
+                    video_codec_labels,
                     video_codec_idx,
                     Message::VideoCodecSelected,
                 )
@@ -1890,7 +1886,7 @@ impl Ytdlp {
             .apply(padded_control),
             row![
                 body(fl!("video-codec")).width(Length::FillPortion(1)),
-                codec_dropdown,
+                codec_control,
             ]
             .align_y(Alignment::Center)
             .spacing(space_xxs)
@@ -1914,7 +1910,11 @@ impl Ytdlp {
 
         let Spacing { space_xxs, .. } = cosmic::theme::active().cosmic().spacing;
 
-        let quality_dropdown: Element<'_, Message> = if let Some(pid) = popup_id {
+        let quality_control: Element<'_, Message> = if self.audio_codec == AudioCodec::Any {
+            body(fl!("audio-quality-original"))
+                .width(Length::FillPortion(1))
+                .into()
+        } else if let Some(pid) = popup_id {
             Element::from(
                 cosmic::widget::dropdown::popup_dropdown(
                     AUDIO_QUALITY_LABELS,
@@ -1970,7 +1970,7 @@ impl Ytdlp {
             .apply(padded_control),
             row![
                 body(fl!("audio-quality")).width(Length::FillPortion(1)),
-                quality_dropdown,
+                quality_control,
             ]
             .align_y(Alignment::Center)
             .spacing(space_xxs)
@@ -2003,7 +2003,7 @@ impl Ytdlp {
 
         let status_line = match dl.stage {
             DownloadStage::Preparing => fl!("preparing-download"),
-            DownloadStage::Subtitles => fl!("downloading-subtitles"),
+            DownloadStage::DownloadingAssets => fl!("downloading-assets"),
             DownloadStage::PostProcessing => {
                 if dl.is_audio {
                     fl!("post-processing-audio")
@@ -2036,15 +2036,20 @@ impl Ytdlp {
         };
 
         // Format file size: "1.2 MB / 45.6 MB" or "1.2 MB"
-        let size_text = if dl.total_bytes > 0 {
+        let size_text = if dl.stage == DownloadStage::Downloading && dl.total_bytes > 0 {
             let dl_mb = dl.downloaded_bytes as f64 / 1_048_576.0;
             let total_mb = dl.total_bytes as f64 / 1_048_576.0;
             format!("{:.1} MB / {:.1} MB", dl_mb, total_mb)
-        } else if dl.downloaded_bytes > 0 {
+        } else if dl.stage == DownloadStage::Downloading && dl.downloaded_bytes > 0 {
             let dl_mb = dl.downloaded_bytes as f64 / 1_048_576.0;
             format!("{:.1} MB", dl_mb)
         } else {
             String::new()
+        };
+        let progress_bar = if dl.stage == DownloadStage::Downloading {
+            cosmic::widget::determinate_linear(dl.percent / 100.0)
+        } else {
+            cosmic::widget::indeterminate_linear()
         };
 
         let cancel_btn = cosmic::widget::tooltip(
@@ -2064,9 +2069,7 @@ impl Ytdlp {
             row![
                 column![
                     cosmic::widget::text::caption(status_line),
-                    cosmic::widget::determinate_linear(dl.percent / 100.0)
-                        .width(Length::Fill)
-                        .girth(6),
+                    progress_bar.width(Length::Fill).girth(6),
                     if !size_text.is_empty() {
                         cosmic::widget::text::caption(size_text)
                     } else {
@@ -2092,8 +2095,9 @@ impl Ytdlp {
 #[cfg(test)]
 mod tests {
     use super::{
-        VideoCodec, VideoQuality, is_post_processing_line, is_version_newer,
-        sanitize_custom_filename, subtitle_rate_limit_line, video_format_filter,
+        DownloadStage, VideoCodec, VideoContainer, VideoQuality, download_stage_from_line,
+        is_post_processing_line, is_version_newer, sanitize_custom_filename,
+        subtitle_rate_limit_line, video_codec_options, video_format_filter,
     };
 
     #[test]
@@ -2114,16 +2118,80 @@ mod tests {
     #[test]
     fn video_codec_selection_is_included_in_format_filter() {
         assert_eq!(
-            video_format_filter(false, VideoQuality::HD, VideoCodec::AV1),
+            video_format_filter(
+                false,
+                VideoQuality::HD,
+                VideoCodec::AV1,
+                VideoContainer::MKV
+            ),
             "bestvideo[height<=720][vcodec^=av01]+bestaudio/best[height<=720][vcodec^=av01]"
         );
         assert_eq!(
-            video_format_filter(true, VideoQuality::Lowest, VideoCodec::VP9),
+            video_format_filter(
+                true,
+                VideoQuality::Lowest,
+                VideoCodec::VP9,
+                VideoContainer::MKV
+            ),
             "worstvideo[vcodec^=vp9]+worstaudio/worst[vcodec^=vp9]"
         );
         assert_eq!(
-            video_format_filter(false, VideoQuality::Highest, VideoCodec::Any),
+            video_format_filter(
+                false,
+                VideoQuality::Highest,
+                VideoCodec::Any,
+                VideoContainer::MKV
+            ),
             "bestvideo+bestaudio/best"
+        );
+    }
+
+    #[test]
+    fn mp4_filter_uses_h264_video_and_m4a_audio_for_playback_compatibility() {
+        for selected_codec in [VideoCodec::Any, VideoCodec::AV1, VideoCodec::VP9] {
+            assert_eq!(
+                video_format_filter(
+                    false,
+                    VideoQuality::Highest,
+                    selected_codec,
+                    VideoContainer::MP4
+                ),
+                "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]"
+            );
+        }
+    }
+
+    #[test]
+    fn webm_filter_keeps_video_and_audio_in_webm_formats() {
+        assert_eq!(
+            video_format_filter(
+                false,
+                VideoQuality::HD,
+                VideoCodec::VP9,
+                VideoContainer::WebM
+            ),
+            "bestvideo[height<=720][ext=webm][vcodec^=vp9]+bestaudio[ext=webm]/best[height<=720][ext=webm][vcodec^=vp9]"
+        );
+    }
+
+    #[test]
+    fn codec_options_match_the_selected_container() {
+        assert_eq!(
+            video_codec_options(VideoContainer::MP4).0,
+            [VideoCodec::AVC1]
+        );
+        assert_eq!(
+            video_codec_options(VideoContainer::WebM).0,
+            [VideoCodec::AV1, VideoCodec::VP9, VideoCodec::Any]
+        );
+        assert_eq!(
+            video_codec_options(VideoContainer::MKV).0,
+            [
+                VideoCodec::AV1,
+                VideoCodec::AVC1,
+                VideoCodec::VP9,
+                VideoCodec::Any
+            ]
         );
     }
 
@@ -2153,6 +2221,34 @@ mod tests {
             );
         }
         assert!(!is_post_processing_line("[info] Downloading subtitles: pt"));
+    }
+
+    #[test]
+    fn progress_stage_follows_video_assets_and_post_processing_events() {
+        let lines = [
+            "[info] Downloading subtitles: en",
+            "[download] Destination: video.mp4",
+            "[info] Downloading video thumbnail 50 ...",
+            "[EmbedThumbnail] Adding thumbnail to video.mp4",
+        ];
+        let stages = lines
+            .iter()
+            .filter_map(|line| download_stage_from_line(line))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            stages,
+            [
+                DownloadStage::DownloadingAssets,
+                DownloadStage::Downloading,
+                DownloadStage::DownloadingAssets,
+                DownloadStage::PostProcessing,
+            ]
+        );
+        assert_eq!(
+            download_stage_from_line("[download] 50.0% of 10.0MiB at 2.0MiB/s ETA 00:05"),
+            None
+        );
     }
 }
 

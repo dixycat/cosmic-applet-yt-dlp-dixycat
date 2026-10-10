@@ -23,3 +23,10 @@ CONCLUÍDO
 - Corrigidos bugs de download: temporários agora são isolados por tarefa, codec escolhido é aplicado, nomes personalizados são sanitizados e não sobrescrevem itens de playlists, progresso é restaurado por item e avisos HTTP 429 não dependem das últimas linhas do log.
 - Corrigida a transição visual de legendas para pós-processamento: incorporação de legenda/thumbnail, metadados e movimentação final agora são reconhecidos.
 - Gerado e verificado o pacote `target/debian/cosmic-applet-yt-dlp-dixycat_0.6.0-1_amd64.deb`; `cargo test --quiet` passou com 5 testes.
+- Corrigido o modo de áudio: “Original” preserva formato e qualidade da fonte, as opções de qualidade não prometem bitrate fixo e thumbnails temporárias ficam isoladas por download para evitar apagar imagens existentes.
+- Corrigida a incorporação de capas em Opus/FLAC: o applet não depende mais de testar mutagen com um Python potencialmente diferente do usado pelo yt-dlp. Os formatos com suporte foram cobertos por testes; WAV não recebe capa embutida.
+- Corrigido o progresso do vídeo: etapas de legenda/capa e pós-processamento usam indicador indeterminado, e a barra retorna à transferência ao detectar o destino do vídeo.
+- Pacote `.deb` v0.6.1 reconstruído após as correções de progresso; `cargo test --quiet` passou com 10 testes e `cargo build --release` concluiu.
+- Corrigida a seleção de formatos por contêiner: MP4 usa AVC1/H.264 com áudio M4A, WebM oferece AV1/VP9 e filtra streams WebM, MKV mantém a seleção ampla. Evita remuxar VP9/WebM para MP4 sem conversão.
+- Gerado e verificado o pacote `target/debian/cosmic-applet-yt-dlp-dixycat_0.6.2-1_amd64.deb`; `cargo test --quiet` passou com 13 testes e a compilação release concluiu.
+- Teste de reprodução: o MP4 toca normalmente no VLC com e sem legenda; a tela verde fica restrita ao COSMIC Media Player, indicando uma incompatibilidade do player, não confirmando falha no arquivo.
