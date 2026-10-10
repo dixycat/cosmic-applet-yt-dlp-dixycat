@@ -1,3 +1,19 @@
+## 🚀 O que há de novo na v0.6.0 / What's New in v0.6.0
+
+### 🇧🇷 Português
+- 🧹 **Downloads mais seguros:** Arquivos temporários são isolados por tarefa e nomes personalizados são sanitizados para evitar caminhos inválidos e colisões em playlists.
+- 🎞️ **Codec aplicado:** A preferência de codec selecionada agora é usada na escolha do formato.
+- 📈 **Progresso consistente:** A interface reconhece as etapas de pós-processamento e restaura o estado de download entre itens da playlist.
+- ⚠️ **Aviso de limite mais confiável:** A detecção de HTTP 429 não depende mais das linhas recentes do log.
+
+### 🇺🇸 English
+- 🧹 **Safer downloads:** Temporary files are isolated per job, and custom filenames are sanitized to avoid invalid paths and playlist collisions.
+- 🎞️ **Codec preference applied:** The selected codec is now used when choosing the download format.
+- 📈 **Consistent progress:** The UI recognizes post-processing stages and restores the download state between playlist items.
+- ⚠️ **More reliable rate-limit warning:** HTTP 429 detection no longer depends on recent log lines.
+
+---
+
 ## 🚀 O que há de novo na v0.5.0 / What's New in v0.5.0
 
 ### 🇧🇷 Português

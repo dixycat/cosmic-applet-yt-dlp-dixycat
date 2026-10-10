@@ -20,4 +20,6 @@ CONCLUÍDO
 - Adicionadas fases visíveis de preparação, download de legendas e pós-processamento.
 - Adicionado aviso quando o YouTube limita uma faixa de legenda por HTTP 429.
 - Confirmado em log que legendas disponíveis são embutidas no MP4 com status de download 0.
-- Preparada a próxima release v0.5.0 com as melhorias do COSMIC, legendas e limpeza segura.
+- Corrigidos bugs de download: temporários agora são isolados por tarefa, codec escolhido é aplicado, nomes personalizados são sanitizados e não sobrescrevem itens de playlists, progresso é restaurado por item e avisos HTTP 429 não dependem das últimas linhas do log.
+- Corrigida a transição visual de legendas para pós-processamento: incorporação de legenda/thumbnail, metadados e movimentação final agora são reconhecidos.
+- Gerado e verificado o pacote `target/debian/cosmic-applet-yt-dlp-dixycat_0.6.0-1_amd64.deb`; `cargo test --quiet` passou com 5 testes.

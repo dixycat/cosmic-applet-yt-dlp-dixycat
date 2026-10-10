@@ -1,8 +1,8 @@
 REGISTRO DE ALTERACOES E PROXIMOS PASSOS
 Projeto: cosmic-applet-yt-dlp-dixycat
-Atualizado em: 2026-09-19
+Atualizado em: 2026-10-10
 
-Proxima release planejada: v0.5.0
+Proxima release planejada: v0.6.0
 
 OBJETIVO DESTE ARQUIVO
 Este arquivo resume o que foi alterado durante a correcao dos bugs recentes,
@@ -60,6 +60,8 @@ VALIDACOES JA FEITAS
 - O pacote .deb foi verificado e contem Dixycat-yt-dlp-icon.png.
 - O log real confirmou download e incorporacao de legendas com status 0.
 - O pacote .deb foi gerado com just build-deb.
+- O pacote v0.6.0 foi gerado em target/debian/cosmic-applet-yt-dlp-dixycat_0.6.0-1_amd64.deb e verificado.
+- cargo test --quiet passou com 5 testes antes da compilacao do pacote v0.6.0.
 - O pacote foi instalado/reinstalado no sistema.
 - Um download real do YouTube foi confirmado nos logs de depuracao.
 - A falha do TikTok foi reproduzida com o yt-dlp incluido no applet.
