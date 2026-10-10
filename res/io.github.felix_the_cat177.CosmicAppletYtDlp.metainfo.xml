@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.3" date="2026-10-10">
+      <description>
+        <p>Update downloads now show progress, select packages for Pop!_OS or Fedora, and ask before restarting the COSMIC panel.</p>
+        <p xml:lang="pt_BR">O download da atualização agora mostra o progresso, seleciona pacotes para Pop!_OS ou Fedora e pergunta antes de reiniciar o painel COSMIC.</p>
+        <p xml:lang="es">La descarga de actualizaciones ahora muestra el progreso, selecciona paquetes para Pop!_OS o Fedora y pregunta antes de reiniciar el panel COSMIC.</p>
+      </description>
+    </release>
     <release version="0.6.2" date="2026-10-10">
       <description>
         <p>Improved video compatibility with container-specific video codecs and audio formats.</p>

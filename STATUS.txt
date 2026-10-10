@@ -30,3 +30,4 @@ CONCLUÍDO
 - Corrigida a seleção de formatos por contêiner: MP4 usa AVC1/H.264 com áudio M4A, WebM oferece AV1/VP9 e filtra streams WebM, MKV mantém a seleção ampla. Evita remuxar VP9/WebM para MP4 sem conversão.
 - Gerado e verificado o pacote `target/debian/cosmic-applet-yt-dlp-dixycat_0.6.2-1_amd64.deb`; `cargo test --quiet` passou com 13 testes e a compilação release concluiu.
 - Teste de reprodução: o MP4 toca normalmente no VLC com e sem legenda; a tela verde fica restrita ao COSMIC Media Player, indicando uma incompatibilidade do player, não confirmando falha no arquivo.
+- Adicionada atualização in-app com progresso de download, seleção `.deb`/`.rpm` por distribuição/arquitetura e confirmação antes de reiniciar o painel COSMIC; validado com 15 testes e build release.

@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use cosmic::app::{Core, Task};
 use cosmic::applet::padded_control;
@@ -1069,6 +1071,9 @@ pub struct Ytdlp {
     update_available: Option<ReleaseInfo>,
     is_checking_updates: bool,
     is_installing_update: bool,
+    update_installed: bool,
+    update_download_progress: Arc<UpdateDownloadProgress>,
+    show_panel_restart_prompt: bool,
     // Last check result message shown in tooltip
     update_last_msg: Option<String>,
 }
@@ -1125,10 +1130,13 @@ pub enum Message {
     UpdateCheckResult(Result<Option<ReleaseInfo>, String>),
     /// Install update with polkit
     InstallUpdate,
+    /// Refresh the visible download progress while an update is installing.
+    UpdateInstallProgressTick,
     /// Installation result
     InstallResult(Result<(), String>),
-    /// The updated binary could not replace the currently running applet.
-    RestartFailed(String),
+    ConfirmPanelRestart,
+    DeclinePanelRestart,
+    PanelRestartResult(Result<(), String>),
 }
 
 /// Release information from GitHub API
@@ -1140,6 +1148,21 @@ pub struct ReleaseInfo {
     pub download_url: String,
     #[allow(dead_code)]
     pub release_notes: String,
+    pub distro_name: String,
+    package_type: UpdatePackageType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpdatePackageType {
+    Deb,
+    Rpm,
+}
+
+#[derive(Debug, Default)]
+struct UpdateDownloadProgress {
+    downloaded_bytes: AtomicU64,
+    total_bytes: AtomicU64,
+    installing_package: std::sync::atomic::AtomicBool,
 }
 
 impl Application for Ytdlp {
@@ -1216,7 +1239,9 @@ impl Application for Ytdlp {
         } = cosmic::theme::active().cosmic().spacing;
 
         // Determine update button icon and tooltip based on current state
-        let update_icon_name = if self.update_available.is_some() {
+        let update_icon_name = if self.update_installed {
+            "emblem-ok-symbolic"
+        } else if self.update_available.is_some() {
             "software-update-available-symbolic"
         } else if self.is_checking_updates {
             "emblem-synchronizing-symbolic"
@@ -1230,7 +1255,15 @@ impl Application for Ytdlp {
                 .clone()
                 .unwrap_or_else(|| fl!("check-updates"))
         };
-        let update_btn: Element<'_, Message> = if self.update_available.is_some() {
+        let update_btn: Element<'_, Message> = if self.is_installing_update
+            || self.show_panel_restart_prompt
+        {
+            cosmic::widget::button::icon(cosmic::widget::icon::from_name(update_icon_name)).into()
+        } else if self.update_installed {
+            cosmic::widget::button::icon(cosmic::widget::icon::from_name(update_icon_name))
+                .on_press(Message::CheckForUpdates)
+                .into()
+        } else if self.update_available.is_some() {
             cosmic::widget::button::icon(cosmic::widget::icon::from_name(update_icon_name))
                 .on_press(Message::InstallUpdate)
                 .into()
@@ -1319,6 +1352,66 @@ impl Application for Ytdlp {
             },
         ]
         .padding([pad.0, pad.1]);
+
+        if self.is_installing_update {
+            let progress = self.update_download_progress.as_ref();
+            let installing_package = progress.installing_package.load(Ordering::Relaxed);
+            let total = progress.total_bytes.load(Ordering::Relaxed);
+            let downloaded = progress.downloaded_bytes.load(Ordering::Relaxed);
+            let status = if installing_package {
+                fl!("installing-update")
+            } else {
+                fl!("downloading-update")
+            };
+            let progress_bar = if !installing_package && total > 0 {
+                cosmic::widget::determinate_linear(
+                    (downloaded as f32 / total as f32).clamp(0.0, 1.0),
+                )
+            } else {
+                cosmic::widget::indeterminate_linear()
+            };
+            let progress_text = if !installing_package && total > 0 {
+                format!(
+                    "{}%",
+                    (downloaded as f64 / total as f64 * 100.0).round() as u32
+                )
+            } else {
+                String::new()
+            };
+            content = content.push(
+                column![
+                    body(status),
+                    progress_bar.width(Length::Fill).girth(6),
+                    body(progress_text),
+                ]
+                .spacing(space_xxs)
+                .apply(padded_control),
+            );
+        }
+
+        if self.show_panel_restart_prompt {
+            content = content.push(
+                column![
+                    body(fl!(
+                        "restart-panel-prompt",
+                        distro = self
+                            .update_available
+                            .as_ref()
+                            .map(|release| release.distro_name.as_str())
+                            .unwrap_or("")
+                    )),
+                    row![
+                        cosmic::widget::button::suggested(fl!("restart-panel-now"))
+                            .on_press(Message::ConfirmPanelRestart),
+                        cosmic::widget::button::standard(fl!("restart-panel-later"))
+                            .on_press(Message::DeclinePanelRestart),
+                    ]
+                    .spacing(space_xxs)
+                ]
+                .spacing(space_xxs)
+                .apply(padded_control),
+            );
+        }
 
         // Show platforms panel if toggled
         if self.show_platforms {
@@ -1612,6 +1705,7 @@ impl Application for Ytdlp {
             }
             Message::CheckForUpdates => {
                 self.is_checking_updates = true;
+                self.update_installed = false;
                 return Task::perform(check_for_updates(), |result| {
                     Action::App(Message::UpdateCheckResult(result))
                 });
@@ -1642,21 +1736,50 @@ impl Application for Ytdlp {
             Message::InstallUpdate => {
                 if let Some(ref release) = self.update_available {
                     self.is_installing_update = true;
+                    self.show_panel_restart_prompt = false;
+                    self.update_download_progress
+                        .downloaded_bytes
+                        .store(0, Ordering::Relaxed);
+                    self.update_download_progress
+                        .total_bytes
+                        .store(0, Ordering::Relaxed);
+                    self.update_download_progress
+                        .installing_package
+                        .store(false, Ordering::Relaxed);
                     let download_url = release.download_url.clone();
-                    return Task::perform(install_update(download_url), |result| {
-                        Action::App(Message::InstallResult(result))
-                    });
+                    let package_type = release.package_type;
+                    let progress = Arc::clone(&self.update_download_progress);
+                    return Task::batch([
+                        Task::perform(
+                            install_update(download_url, package_type, progress),
+                            |result| Action::App(Message::InstallResult(result)),
+                        ),
+                        Task::perform(
+                            tokio::time::sleep(std::time::Duration::from_millis(150)),
+                            |_| Action::App(Message::UpdateInstallProgressTick),
+                        ),
+                    ]);
+                }
+            }
+            Message::UpdateInstallProgressTick => {
+                if self.is_installing_update {
+                    return Task::perform(
+                        tokio::time::sleep(std::time::Duration::from_millis(150)),
+                        |_| Action::App(Message::UpdateInstallProgressTick),
+                    );
                 }
             }
             Message::InstallResult(result) => {
                 self.is_installing_update = false;
                 match result {
                     Ok(()) => {
-                        return Task::perform(restart_applet(), |error| {
-                            Action::App(Message::RestartFailed(error))
-                        });
+                        self.show_panel_restart_prompt = true;
+                        self.update_installed = true;
+                        self.update_last_msg = Some(fl!("update-installed"));
                     }
                     Err(e) => {
+                        self.update_last_msg =
+                            Some(format!("{}: {e}", fl!("update-install-failed")));
                         tokio::spawn(async move {
                             let mut binding = Notification::new();
                             let notify = binding
@@ -1668,18 +1791,21 @@ impl Application for Ytdlp {
                     }
                 }
             }
-            Message::RestartFailed(error) => {
-                self.update_last_msg = Some(format!(
-                    "Atualizado, mas não foi possível reiniciar: {error}"
-                ));
-                tokio::spawn(async move {
-                    let mut binding = Notification::new();
-                    let notify = binding
-                        .appname("yt-dlp applet")
-                        .summary("Atualização instalada")
-                        .body("Reabra o applet no painel para usar a nova versão.");
-                    let _ = notify.show_async().await;
+            Message::ConfirmPanelRestart => {
+                self.show_panel_restart_prompt = false;
+                return Task::perform(restart_cosmic_panel(), |result| {
+                    Action::App(Message::PanelRestartResult(result))
                 });
+            }
+            Message::DeclinePanelRestart => {
+                self.show_panel_restart_prompt = false;
+                self.update_last_msg = Some(fl!("update-restart-later"));
+            }
+            Message::PanelRestartResult(result) => {
+                if let Err(error) = result {
+                    self.update_last_msg =
+                        Some(format!("{}: {error}", fl!("panel-restart-failed")));
+                }
             }
         }
         Task::none()
@@ -2095,9 +2221,10 @@ impl Ytdlp {
 #[cfg(test)]
 mod tests {
     use super::{
-        DownloadStage, VideoCodec, VideoContainer, VideoQuality, download_stage_from_line,
-        is_post_processing_line, is_version_newer, sanitize_custom_filename,
-        subtitle_rate_limit_line, video_codec_options, video_format_filter,
+        DownloadStage, UpdatePackageType, VideoCodec, VideoContainer, VideoQuality,
+        download_stage_from_line, is_post_processing_line, is_version_newer, parse_os_release,
+        sanitize_custom_filename, subtitle_rate_limit_line, update_asset_suffix,
+        video_codec_options, video_format_filter,
     };
 
     #[test]
@@ -2106,6 +2233,40 @@ mod tests {
         assert!(is_version_newer("v1.2.3", "v1.2.2"));
         assert!(!is_version_newer("v0.4.2", "v0.4.2"));
         assert!(!is_version_newer("v1.2.3", "v1.2.4"));
+    }
+
+    #[test]
+    fn update_platform_detection_selects_pop_os_and_fedora_package_formats() {
+        assert_eq!(
+            parse_os_release("ID=pop\nPRETTY_NAME=\"Pop!_OS 24.04 LTS\"\n").unwrap(),
+            (UpdatePackageType::Deb, "Pop!_OS 24.04 LTS".to_string())
+        );
+        assert_eq!(
+            parse_os_release("ID=fedora\nPRETTY_NAME=\"Fedora Linux 43\"\n").unwrap(),
+            (UpdatePackageType::Rpm, "Fedora Linux 43".to_string())
+        );
+        assert!(parse_os_release("ID=arch\nPRETTY_NAME=\"Arch Linux\"\n").is_err());
+    }
+
+    #[test]
+    fn update_package_asset_names_match_distribution_and_architecture() {
+        assert_eq!(
+            update_asset_suffix(UpdatePackageType::Deb, "x86_64").unwrap(),
+            "_amd64.deb"
+        );
+        assert_eq!(
+            update_asset_suffix(UpdatePackageType::Deb, "aarch64").unwrap(),
+            "_arm64.deb"
+        );
+        assert_eq!(
+            update_asset_suffix(UpdatePackageType::Rpm, "x86_64").unwrap(),
+            ".x86_64.rpm"
+        );
+        assert_eq!(
+            update_asset_suffix(UpdatePackageType::Rpm, "aarch64").unwrap(),
+            ".aarch64.rpm"
+        );
+        assert!(update_asset_suffix(UpdatePackageType::Rpm, "riscv64").is_err());
     }
 
     #[test]
@@ -2254,6 +2415,7 @@ mod tests {
 
 /// Checks GitHub releases for updates
 async fn check_for_updates() -> Result<Option<ReleaseInfo>, String> {
+    let (package_type, distro_name) = detect_update_platform()?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -2296,28 +2458,24 @@ async fn check_for_updates() -> Result<Option<ReleaseInfo>, String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Find the .deb download URL for the current architecture
+    // Select the native package for the detected distribution and architecture.
     let assets = json["assets"]
         .as_array()
         .ok_or("No assets found in release")?;
 
     let arch = std::env::consts::ARCH;
-    let deb_suffix = match arch {
-        "x86_64" => "amd64.deb",
-        "aarch64" => "arm64.deb",
-        _ => "amd64.deb",
-    };
+    let asset_suffix = update_asset_suffix(package_type, arch)?;
 
+    let package_name_fragment = "cosmic-applet-yt-dlp-dixycat";
     let download_url = assets
         .iter()
         .find(|asset| {
-            asset["name"]
-                .as_str()
-                .map(|name| name.ends_with(deb_suffix))
-                .unwrap_or(false)
+            asset["name"].as_str().is_some_and(|name| {
+                name.starts_with(package_name_fragment) && name.ends_with(asset_suffix)
+            })
         })
         .and_then(|asset| asset["browser_download_url"].as_str())
-        .ok_or("No .deb asset found for this architecture")?
+        .ok_or_else(|| format!("No matching package found for {distro_name} ({arch})"))?
         .to_string();
 
     Ok(Some(ReleaseInfo {
@@ -2325,12 +2483,75 @@ async fn check_for_updates() -> Result<Option<ReleaseInfo>, String> {
         tag_name,
         download_url,
         release_notes,
+        distro_name,
+        package_type,
     }))
 }
 
-/// Downloads and installs update using polkit
-async fn install_update(download_url: String) -> Result<(), String> {
-    use std::io::Write;
+fn parse_os_release(contents: &str) -> Result<(UpdatePackageType, String), String> {
+    let values = contents
+        .lines()
+        .filter_map(|line| {
+            let (key, value) = line.split_once('=')?;
+            let value = value.trim().trim_matches('"').trim_matches('\'');
+            Some((key.trim(), value))
+        })
+        .collect::<HashMap<_, _>>();
+
+    let id = values.get("ID").copied().unwrap_or_default();
+    let id_like = values.get("ID_LIKE").copied().unwrap_or_default();
+    let pretty_name = values
+        .get("PRETTY_NAME")
+        .copied()
+        .unwrap_or("Linux distribution")
+        .to_string();
+
+    let package_type = if id == "fedora" || id_like.split_whitespace().any(|id| id == "fedora") {
+        UpdatePackageType::Rpm
+    } else if matches!(id, "pop" | "debian" | "ubuntu")
+        || id_like
+            .split_whitespace()
+            .any(|id| matches!(id, "debian" | "ubuntu"))
+    {
+        UpdatePackageType::Deb
+    } else {
+        return Err(format!(
+            "Automatic updates are not supported on {pretty_name}"
+        ));
+    };
+
+    Ok((package_type, pretty_name))
+}
+
+fn detect_update_platform() -> Result<(UpdatePackageType, String), String> {
+    let os_release = std::fs::read_to_string("/etc/os-release")
+        .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
+        .map_err(|error| format!("Could not identify the Linux distribution: {error}"))?;
+    parse_os_release(&os_release)
+}
+
+fn update_asset_suffix(
+    package_type: UpdatePackageType,
+    arch: &str,
+) -> Result<&'static str, String> {
+    match (package_type, arch) {
+        (UpdatePackageType::Deb, "x86_64") => Ok("_amd64.deb"),
+        (UpdatePackageType::Deb, "aarch64") => Ok("_arm64.deb"),
+        (UpdatePackageType::Rpm, "x86_64") => Ok(".x86_64.rpm"),
+        (UpdatePackageType::Rpm, "aarch64") => Ok(".aarch64.rpm"),
+        (_, unsupported_arch) => Err(format!(
+            "Unsupported architecture for updates: {unsupported_arch}"
+        )),
+    }
+}
+
+/// Downloads and installs the matching update package using polkit.
+async fn install_update(
+    download_url: String,
+    package_type: UpdatePackageType,
+    progress: Arc<UpdateDownloadProgress>,
+) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
@@ -2350,82 +2571,122 @@ async fn install_update(download_url: String) -> Result<(), String> {
         ));
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read download: {}", e))?;
+    let total_bytes = response.content_length().unwrap_or_default();
+    progress.total_bytes.store(total_bytes, Ordering::Relaxed);
 
-    // Save to temporary location
-    let temp_dir = std::env::temp_dir();
-    let deb_path = temp_dir.join("cosmic-applet-yt-dlp-update.deb");
+    let extension = match package_type {
+        UpdatePackageType::Deb => "deb",
+        UpdatePackageType::Rpm => "rpm",
+    };
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| format!("Could not create temporary package name: {error}"))?
+        .as_nanos();
+    let package_path = std::env::temp_dir().join(format!(
+        "cosmic-applet-yt-dlp-update-{}-{nonce}.{extension}",
+        std::process::id()
+    ));
 
-    let mut file = std::fs::File::create(&deb_path)
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let mut package_created = false;
+    let result = async {
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&package_path)
+            .await
+            .map_err(|error| format!("Failed to create temporary package: {error}"))?;
+        package_created = true;
+        let mut response = response;
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("Failed to download update: {error}"))?
+        {
+            file.write_all(&chunk)
+                .await
+                .map_err(|error| format!("Failed to write update package: {error}"))?;
+            progress
+                .downloaded_bytes
+                .fetch_add(chunk.len() as u64, Ordering::Relaxed);
+        }
+        file.flush()
+            .await
+            .map_err(|error| format!("Failed to flush update package: {error}"))?;
+        drop(file);
 
-    file.write_all(&bytes)
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+        progress.installing_package.store(true, Ordering::Relaxed);
 
-    drop(file);
-
-    // Use polkit to install with elevated privileges
-    let deb_path_str = deb_path.to_string_lossy();
-    let output = tokio::process::Command::new("pkexec")
-        .arg("apt")
-        .arg("install")
-        .arg("-y")
-        .arg(&*deb_path_str)
-        .output()
-        .await
-        .map_err(|e| {
+        let mut command = tokio::process::Command::new("pkexec");
+        match package_type {
+            UpdatePackageType::Deb => {
+                command.args(["apt", "install", "-y", "--"]);
+            }
+            UpdatePackageType::Rpm => {
+                command.args(["dnf", "install", "-y", "--"]);
+            }
+        }
+        let output = command.arg(&package_path).output().await.map_err(|error| {
             format!(
-                "Failed to execute pkexec: {}. Make sure polkit is installed.",
-                e
+                "Failed to execute the package installer: {error}. Make sure polkit is installed."
             )
         })?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Installation failed: {}", stderr));
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let details = if stderr.trim().is_empty() {
+                stdout.trim()
+            } else {
+                stderr.trim()
+            };
+            return Err(format!("Installation failed: {details}"));
+        }
+
+        Ok(())
+    }
+    .await;
+
+    if package_created {
+        if let Err(error) = tokio::fs::remove_file(&package_path).await {
+            if result.is_ok() {
+                return Err(format!(
+                    "Update was installed, but its temporary package could not be removed: {error}"
+                ));
+            }
+            debug_log!("Could not remove temporary update package: {error}");
+        }
     }
 
-    // Clean up temp file
-    let _ = std::fs::remove_file(&deb_path);
-
-    Ok(())
+    result
 }
 
-/// Replaces this process with the updated executable. `exec` preserves the
-/// process identity used by COSMIC, unlike `exit(0)`, which removes the applet
-/// from the panel without starting it again.
-async fn restart_applet() -> String {
-    let mut binding = Notification::new();
-    let notify = binding
-        .appname("yt-dlp applet")
-        .summary("Atualização instalada")
-        .body("Reiniciando o applet com a nova versão...");
-    let _ = notify.show_async().await;
-
-    // Give the desktop notification a moment to be delivered before replacing
-    // the process. The new executable keeps the original command-line flags.
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
+/// Ask the COSMIC session to recreate its panel process. This is only called
+/// after the user explicitly confirms the restart.
+async fn restart_cosmic_panel() -> Result<(), String> {
     #[cfg(unix)]
     {
-        use std::os::unix::process::CommandExt;
+        let panel_pid = unsafe { libc::getppid() };
+        let comm_path = format!("/proc/{panel_pid}/comm");
+        let process_name = std::fs::read_to_string(&comm_path)
+            .map_err(|error| format!("Could not identify the COSMIC panel process: {error}"))?;
+        if process_name.trim() != "cosmic-panel" {
+            return Err(format!(
+                "The applet parent is not cosmic-panel (found {})",
+                process_name.trim()
+            ));
+        }
 
-        let executable = match std::env::current_exe() {
-            Ok(path) => path,
-            Err(error) => return format!("não foi possível localizar o executável: {error}"),
-        };
-        let args: Vec<_> = std::env::args_os().skip(1).collect();
-        debug_log!("Restarting applet with executable {:?}", executable);
-
-        let error = std::process::Command::new(executable).args(args).exec();
-        format!("não foi possível iniciar a nova versão: {error}")
+        if unsafe { libc::kill(panel_pid, libc::SIGTERM) } != 0 {
+            return Err(format!(
+                "Could not request a COSMIC panel restart: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(())
     }
 
     #[cfg(not(unix))]
     {
-        "reinício automático não é suportado neste sistema".to_string()
+        Err("Restarting the COSMIC panel is not supported on this system".to_string())
     }
 }
