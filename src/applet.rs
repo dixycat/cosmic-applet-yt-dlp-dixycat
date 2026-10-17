@@ -350,6 +350,38 @@ fn is_post_processing_line(line: &str) -> bool {
     .any(|marker| line.contains(marker))
 }
 
+fn download_destination_stage(line: &str) -> Option<DownloadStage> {
+    let destination = line.split_once("[download] Destination:")?.1.trim();
+    let extension = std::path::Path::new(destination)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase();
+    let extension = extension.as_str();
+
+    if matches!(
+        extension,
+        "vtt"
+            | "srt"
+            | "ass"
+            | "ssa"
+            | "ttml"
+            | "lrc"
+            | "json"
+            | "description"
+            | "webp"
+            | "jpg"
+            | "jpeg"
+            | "png"
+            | "bmp"
+            | "gif"
+            | "avif"
+    ) {
+        Some(DownloadStage::DownloadingAssets)
+    } else {
+        Some(DownloadStage::Downloading)
+    }
+}
+
 fn download_stage_from_line(line: &str) -> Option<DownloadStage> {
     if line.contains("Downloading subtitles")
         || line.contains("Writing video subtitles")
@@ -359,9 +391,12 @@ fn download_stage_from_line(line: &str) -> Option<DownloadStage> {
         Some(DownloadStage::DownloadingAssets)
     } else if is_post_processing_line(line) {
         Some(DownloadStage::PostProcessing)
+    } else if let Some(stage) = download_destination_stage(line) {
+        Some(stage)
     } else if line.contains("[download] Destination:")
         || line.contains("[download] Downloading item")
         || line.contains("[download] Downloading video")
+        || parse_ytdlp_progress_line(line).is_some()
     {
         Some(DownloadStage::Downloading)
     } else {
@@ -708,12 +743,6 @@ async fn run_download_job(
     cmd.stderr(std::process::Stdio::piped());
 
     debug_log!("Spawning yt-dlp command: {:?}", cmd);
-    let _ = output
-        .send(cosmic::Action::App(Message::DownloadStage {
-            id: download_id,
-            stage: DownloadStage::Downloading,
-        }))
-        .await;
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -2222,9 +2251,9 @@ impl Ytdlp {
 mod tests {
     use super::{
         DownloadStage, UpdatePackageType, VideoCodec, VideoContainer, VideoQuality,
-        download_stage_from_line, is_post_processing_line, is_version_newer, parse_os_release,
-        sanitize_custom_filename, subtitle_rate_limit_line, update_asset_suffix,
-        video_codec_options, video_format_filter,
+        download_destination_stage, download_stage_from_line, is_post_processing_line,
+        is_version_newer, parse_os_release, sanitize_custom_filename, subtitle_rate_limit_line,
+        update_asset_suffix, video_codec_options, video_format_filter,
     };
 
     #[test]
@@ -2408,7 +2437,52 @@ mod tests {
         );
         assert_eq!(
             download_stage_from_line("[download] 50.0% of 10.0MiB at 2.0MiB/s ETA 00:05"),
+            Some(DownloadStage::Downloading)
+        );
+    }
+
+    #[test]
+    fn subtitle_and_thumbnail_destinations_stay_in_asset_stage_until_video_starts() {
+        let lines = [
+            "[info] Downloading 1 format(s): 298+140",
+            "[info] Writing video subtitles to: /tmp/video.pt.vtt",
+            "[download] Destination: /tmp/video.pt.vtt",
+            "[info] Downloading video thumbnail 44 ...",
+            "[download] Destination: /tmp/video.webp",
+            "[download] Destination: /tmp/video.f298.mp4",
+            "[download] 0.0% of 82.29MiB at 191.95KiB/s ETA 07:20",
+        ];
+        let stages = lines
+            .iter()
+            .filter_map(|line| download_stage_from_line(line))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            stages,
+            [
+                DownloadStage::DownloadingAssets,
+                DownloadStage::DownloadingAssets,
+                DownloadStage::DownloadingAssets,
+                DownloadStage::DownloadingAssets,
+                DownloadStage::Downloading,
+                DownloadStage::Downloading,
+            ]
+        );
+        assert_eq!(
+            download_stage_from_line("[info] Downloading 1 format(s): 298+140"),
             None
+        );
+        assert_eq!(
+            download_stage_from_line("[download] 0.0% of 82.29MiB at 191.95KiB/s ETA 07:20"),
+            Some(DownloadStage::Downloading)
+        );
+        assert_eq!(
+            download_destination_stage("[download] Destination: /tmp/video.pt.vtt"),
+            Some(DownloadStage::DownloadingAssets)
+        );
+        assert_eq!(
+            download_destination_stage("[download] Destination: /tmp/video.f298.mp4"),
+            Some(DownloadStage::Downloading)
         );
     }
 }

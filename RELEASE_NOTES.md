@@ -1,11 +1,11 @@
-## 🚀 O que há de novo na v0.6.3 / What's New in v0.6.3
+## 🚀 O que há de novo na v0.6.5 / What's New in v0.6.5
 
 ### 🇧🇷 Português
-- 📊 **Progresso da atualização:** A barra mostra o andamento do download do pacote e indica quando a instalação está em curso.
-- 🐧 **Atualização por distribuição:** Identifica Pop!_OS e Fedora e instala o pacote `.deb` ou `.rpm` correspondente à arquitetura.
-- 🔄 **Reinício do painel sob confirmação:** Após instalar, pergunta se deseja reiniciar o painel COSMIC agora ou mais tarde.
+- 📦 **Instalação no Pop!_OS corrigida:** O pacote `.deb` agora depende de `pkexec`, disponível nos repositórios atuais, em vez do pacote transitório `policykit-1`.
+- 📊 **Progresso de download corrigido:** A interface permanece em preparação enquanto o yt-dlp busca metadados/legendas e entra na etapa de download ao detectar o arquivo ou receber progresso; também recupera a etapa correta após baixar legendas e capas.
+- 🧩 **Dependências COSMIC atualizadas:** Atualizado o libcosmic e o conjunto de dependências travado no `Cargo.lock`.
 
 ### 🇺🇸 English
-- 📊 **Update progress:** The progress bar shows package download progress and indicates when installation is in progress.
-- 🐧 **Distribution-aware updates:** Detects Pop!_OS and Fedora and installs the matching `.deb` or `.rpm` package for the system architecture.
-- 🔄 **Panel restart confirmation:** After installation, asks whether to restart the COSMIC panel now or later.
+- 📦 **Pop!_OS installation fixed:** The `.deb` package now depends on `pkexec`, available in current repositories, instead of the transitional `policykit-1` package.
+- 📊 **Download progress fixed:** The UI stays in preparation while yt-dlp fetches metadata/subtitles, switches to downloading when the file or transfer progress is detected, and recovers the correct stage after subtitles and thumbnails.
+- 🧩 **Updated COSMIC dependencies:** Updated libcosmic and the dependency set pinned in `Cargo.lock`.

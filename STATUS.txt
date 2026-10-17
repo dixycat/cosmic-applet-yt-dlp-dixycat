@@ -31,3 +31,6 @@ CONCLUÍDO
 - Gerado e verificado o pacote `target/debian/cosmic-applet-yt-dlp-dixycat_0.6.2-1_amd64.deb`; `cargo test --quiet` passou com 13 testes e a compilação release concluiu.
 - Teste de reprodução: o MP4 toca normalmente no VLC com e sem legenda; a tela verde fica restrita ao COSMIC Media Player, indicando uma incompatibilidade do player, não confirmando falha no arquivo.
 - Adicionada atualização in-app com progresso de download, seleção `.deb`/`.rpm` por distribuição/arquitetura e confirmação antes de reiniciar o painel COSMIC; validado com 15 testes e build release.
+- Corrigida a dependência do pacote Debian: usa `pkexec` em vez de `policykit-1`, que não está disponível nos repositórios atuais do Pop!_OS.
+- Corrigida a transição do progresso de legenda/capa para o download do vídeo, classificando os destinos pelos tipos de arquivo; atualizados libcosmic e dependências Cargo.
+- Pacote v0.6.4 validado localmente no Pop!_OS; preparando a publicação como v0.6.5.

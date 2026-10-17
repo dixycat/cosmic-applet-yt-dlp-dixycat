@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.5" date="2026-10-16">
+      <description>
+        <p>Fixed Debian package installation on current Pop!_OS, corrected video download progress, and updated COSMIC dependencies.</p>
+        <p xml:lang="pt_BR">Corrigida a instalação do pacote Debian no Pop!_OS atual, o progresso do download de vídeo e as dependências COSMIC.</p>
+        <p xml:lang="es">Se corrigió la instalación del paquete Debian en Pop!_OS actual, el progreso de descarga de vídeo y se actualizaron las dependencias de COSMIC.</p>
+      </description>
+    </release>
     <release version="0.6.3" date="2026-10-10">
       <description>
         <p>Update downloads now show progress, select packages for Pop!_OS or Fedora, and ask before restarting the COSMIC panel.</p>
