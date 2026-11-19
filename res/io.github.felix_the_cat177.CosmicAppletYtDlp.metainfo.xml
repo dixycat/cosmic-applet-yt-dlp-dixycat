@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.6" date="2026-11-19">
+      <description>
+        <p>Updated COSMIC dependencies and upstream libcosmic, upgraded yt-dlp to 2.10, ashpd to 0.14, and reqwest to 0.13.</p>
+        <p xml:lang="pt_BR">Dependências COSMIC e libcosmic upstream atualizadas, yt-dlp atualizado para 2.10, ashpd para 0.14 e reqwest para 0.13.</p>
+        <p xml:lang="es">Se actualizaron las dependencias de COSMIC y upstream libcosmic, yt-dlp a 2.10, ashpd a 0.14 y reqwest a 0.13.</p>
+      </description>
+    </release>
     <release version="0.6.5" date="2026-10-16">
       <description>
         <p>Fixed Debian package installation on current Pop!_OS, corrected video download progress, and updated COSMIC dependencies.</p>

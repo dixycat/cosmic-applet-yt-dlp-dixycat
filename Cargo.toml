@@ -1,18 +1,18 @@
 [package]
 name = "cosmic-applet-yt-dlp-dixycat"
-version = "0.6.5"
+version = "0.6.6"
 edition = "2024"
 authors = ["Dixycat <felix-the-cat177>"]
 license = "GPL-3.0-only"
 description = "A simple yt-dlp GUI for the COSMIC DE"
 
 [dependencies]
-ashpd = "0.11"
-i18n-embed-fl = "0.9"
+ashpd = { version = "0.14", features = ["file_chooser"] }
+i18n-embed-fl = "0.10"
 libc = "0.2"
 notify-rust = "4"
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls",
     "json",
     "stream",
 ] }
@@ -22,10 +22,10 @@ tokio = { version = "1", features = ["full"] }
 url = "2"
 xdg = "2.5"
 xdg-user = "0.2"
-yt-dlp = "2.8"
+yt-dlp = "2.10"
 
 [dependencies.i18n-embed]
-version = "0.15"
+version = "0.16"
 features = ["fluent-system", "desktop-requester"]
 
 [dependencies.libcosmic]

@@ -1543,7 +1543,9 @@ impl Application for Ytdlp {
                         .ok()?;
                     let folder = request.response().ok()?;
                     let uri = folder.uris().first()?;
-                    uri.to_file_path()
+                    url::Url::parse(uri.as_str())
+                        .ok()?
+                        .to_file_path()
                         .ok()
                         .map(|p| p.to_string_lossy().into_owned())
                 };
